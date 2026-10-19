@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff Schedule Builder</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#1c2430; --muted:#5d6777; --line:#dde2e8; --soft:#eef1f4;
+  --accent:#1f6f8b; --accent-ink:#fff; --warn:#8a5000; --warn-bg:#fff4df; --ok:#1d7446; --ok-bg:#e6f5ec;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+button{font:inherit;cursor:pointer}
+header.app{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header.app h1{font-size:18px;margin:0}
+header.app p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:7px}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:4px 9px;font-size:12.5px}
+.btn.x{border:0;background:none;color:var(--muted);padding:4px 6px;font-size:16px;line-height:1}
+.btn.x:hover{color:#b42318;background:none}
+.layout{display:grid;grid-template-columns:390px minmax(0,1fr);gap:16px;padding:16px;max-width:1560px;margin:0 auto}
+@media (max-width:960px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0}
+.controls details{border-bottom:1px solid var(--line)}
+.controls details:last-child{border-bottom:0}
+.controls summary{padding:12px 14px;font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.controls summary::-webkit-details-marker{display:none}
+.controls summary::after{content:"+";color:var(--muted);font-weight:400;font-size:18px}
+.controls details[open] summary::after{content:"–"}
+.sec{padding:0 14px 14px}
+.hint{font-size:12px;color:var(--muted);margin:0 0 10px}
+label.f{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+input,select{font:inherit;font-size:13.5px;padding:6px 7px;border:1px solid var(--line);border-radius:6px;width:100%;background:#fff;color:var(--ink);min-width:0}
+input:focus,select:focus{outline:2px solid #9cc7d6;outline-offset:0;border-color:#9cc7d6}
+input[type=checkbox]{width:16px;height:16px;padding:0;margin:0;accent-color:var(--accent)}
+input[type=color]{padding:1px;height:32px;width:34px;cursor:pointer}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0}
+.daysTbl{width:100%;border-collapse:collapse}
+.daysTbl td{padding:3px 3px}
+.daysTbl td:first-child{width:72px}
+.daysTbl label{display:flex;gap:7px;align-items:center;font-weight:500}
+h3.sub{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--line)}
+.sec > h3.sub:first-child{margin-top:0;padding-top:0;border-top:0}
+.tag{font-size:10.5px;text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500;margin-left:6px}
+table.sum tr.grp td{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);font-weight:700;padding-top:12px;border-bottom:1px solid var(--line)}
+.slots li small{color:var(--muted)}
+.toggle{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:5px 8px;cursor:pointer;min-height:33px}
+.toggle span{display:flex;flex-direction:column;line-height:1.15}
+.toggle b{font-size:12.5px;font-weight:600}
+.toggle small{font-size:11px;color:var(--muted)}
+.toggle:has(input:checked){border-color:var(--accent);background:#e8f3f7}
+input:disabled{background:var(--soft);color:var(--muted)}
+.winTbl td{padding:2px}
+.winTbl td:first-child{width:38px;font-weight:500;font-size:13px}
+.winTbl input{padding:4px 3px;font-size:12.5px}
+.winTbl th{font-size:11px;color:var(--muted);font-weight:500;text-align:left;padding:0 2px}
+.listRow{display:grid;gap:6px;align-items:end;padding:8px 0;border-top:1px dashed var(--line)}
+.listRow:first-child{border-top:0}
+.cRow{grid-template-columns:1fr 64px 74px 74px 26px}
+.kRow{grid-template-columns:1fr 54px 66px 62px 34px 26px}
+.listRow .f{font-size:11px}
+.sumPct{font-size:12.5px;margin:8px 0 0;color:var(--muted)}
+.sumPct b.bad{color:#b42318}
+.out{padding:16px}
+.print-head{display:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip{font-size:12.5px;padding:5px 10px;border-radius:999px;background:var(--soft);border:1px solid var(--line)}
+.chip.ok{background:var(--ok-bg);border-color:#bfe3cc;color:var(--ok)}
+.chip.warn{background:var(--warn-bg);border-color:#f2d39e;color:var(--warn)}
+.warnings{background:var(--warn-bg);border:1px solid #f2d39e;color:#5c3a00;border-radius:8px;padding:8px 12px 8px 30px;margin:0 0 12px;font-size:13px}
+.warnings li{margin:3px 0}
+.calWrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.cal{display:grid;min-width:560px}
+.cal .hd{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:7px 6px;font-weight:600;font-size:13px;text-align:center}
+.cal .hd small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.axis{position:relative;border-right:1px solid var(--line)}
+.tick{position:absolute;right:6px;transform:translateY(-50%);font-size:11px;color:var(--muted)}
+.tick:first-child{transform:none}
+.col{position:relative;border-right:1px solid var(--line);background-image:linear-gradient(to bottom,var(--line) 1px,transparent 1px);background-size:100% calc(100% / var(--hours))}
+.col:last-child{border-right:0}
+.off{position:absolute;left:0;right:0;background:repeating-linear-gradient(135deg,#f0f2f5 0 6px,#f8f9fa 6px 12px)}
+.blk{position:absolute;left:3px;right:3px;border-radius:5px;padding:1px 5px;overflow:hidden;font-size:11.5px;line-height:1.25;background:var(--c);color:var(--t,#fff);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.blk b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk span{display:block;opacity:.9;font-size:10.5px;white-space:nowrap}
+.blk.tiny b{font-size:10px;font-weight:500;line-height:1.1}
+.blk.k-notes{opacity:.5}
+.blk.k-meal,.blk.k-break{background:repeating-linear-gradient(135deg,#e3e7ec 0 5px,#eef1f4 5px 10px);color:#3e4856}
+.blk.k-flex{background:#fff;color:var(--muted);box-shadow:inset 0 0 0 1px #c9d0d9;border:1px dashed #c9d0d9}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0 4px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px;background:var(--c)}
+.legend i.hatch{background:repeating-linear-gradient(135deg,#d4d9df 0 3px,#eef1f4 3px 6px)}
+.legend i.flex{background:#fff;border:1px dashed #b6bfca}
+h2{font-size:15px;margin:22px 0 8px}
+table.sum{border-collapse:collapse;width:100%;font-size:13px}
+table.sum th,table.sum td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.sum th{font-size:12px;color:var(--muted);font-weight:600}
+table.sum td.n,table.sum th.n{text-align:right;font-variant-numeric:tabular-nums}
+table.sum tr.total td{font-weight:700;border-top:2px solid var(--ink)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:var(--c);vertical-align:-1px}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.slots div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}
+.slots b{display:block;margin-bottom:4px}
+.slots ol{margin:0;padding-left:20px}
+.foot{font-size:12px;color:var(--muted);margin-top:18px}
+.empty{color:var(--muted);padding:30px;text-align:center}
+.help p,.help li{font-size:12.5px;color:var(--muted)}
+.help ul{padding-left:18px;margin:6px 0}
+@media print{
+  @page{size:letter landscape;margin:.4in}
+  body{background:#fff;font-size:11px}
+  header.app,.controls,.no-print{display:none!important}
+  .layout{display:block;padding:0;max-width:none}
+  .panel{border:0}
+  .out{padding:0}
+  .print-head{display:flex!important;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .print-head h1{font-size:16px;margin:0}
+  .print-head span{font-size:11px;color:#444}
+  .calWrap{overflow:visible;border-color:#bbb}
+  .cal{min-width:0}
+  .calBody{height:6.1in!important}
+  .blk,.off,.legend i,.dot,.col{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page2{break-before:page}
+  .chips{margin-bottom:6px}
+}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div>
+    <h1>Staff Schedule Builder</h1>
+    <p>Set your hours, commitments and task mix — your week and bookable appointment slots are built automatically.</p>
+  </div>
+  <div class="actions">
+    <button class="btn primary" data-act="print">Print / Save as PDF</button>
+    <button class="btn" data-act="export" title="Download your settings as a file">Export settings</button>
+    <button class="btn" data-act="import" title="Load settings from a file">Import settings</button>
+    <button class="btn" data-act="reset">Reset</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ============ CONTROLS ============ -->
+  <aside class="panel controls" id="controls">
+    <details open>
+      <summary>1 · About you</summary>
+      <div class="sec">
+        <div class="grid2">
+          <div><label class="f" for="f-name">Name</label><input id="f-name" data-path="name" placeholder="e.g. Jordan Smith"></div>
+          <div><label class="f" for="f-role">Role</label><input id="f-role" data-path="role" placeholder="e.g. R. Kin."></div>
+        </div>
+        <div><label class="f" for="f-week">Week starting (Monday)</label><input id="f-week" type="date" data-path="weekStart"></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>2 · Hours</summary>
+      <div class="sec">
+        <div class="grid2">
+          <div><label class="f" for="f-fte">FTE</label><input id="f-fte" type="number" step="0.05" min="0" max="1.5" data-path="fte" data-type="num"></div>
+          <div><label class="f" for="f-ft">Full-time hrs / week</label><input id="f-ft" type="number" step="0.5" min="1" max="60" data-path="fullTime" data-type="num"></div>
+        </div>
+        <p class="hint" id="targetHint"></p>
+        <table class="daysTbl" id="daysTbl"></table>
+        <div style="margin-top:8px"><button class="btn small" data-act="fit" title="Keep each start time and set end times so paid hours match your FTE">Fit end times to my FTE</button></div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>3 · Breaks</summary>
+      <div class="sec">
+        <h3 class="sub">Lunch <span class="tag">ESA eating period 1</span></h3>
+        <div class="grid3">
+          <div><label class="f" for="f-lm">Length (min)</label><input id="f-lm" type="number" step="5" min="0" max="90" data-path="lunch.mins" data-type="num"></div>
+          <div><label class="f" for="f-lp">Preferred start</label><input id="f-lp" type="time" step="900" data-path="lunch.pref"></div>
+          <div><label class="f" for="f-lpaid">Lunch is</label>
+            <select id="f-lpaid" data-path="lunch.paid" data-type="bool"><option value="false">Unpaid</option><option value="true">Paid</option></select></div>
+        </div>
+
+        <h3 class="sub">Long-day meal break <span class="tag">ESA eating period 2</span></h3>
+        <label class="check"><input type="checkbox" data-path="autoMeals"> Add a second meal break when you'd otherwise work more than 5 hrs in a row after lunch</label>
+        <div id="meal2Fields">
+          <div class="grid2">
+            <div><label class="f" for="f-m2l">Name</label><input id="f-m2l" data-path="meal2.label" placeholder="e.g. Dinner break"></div>
+            <div><label class="f" for="f-m2m">Length (min)</label><input id="f-m2m" type="number" step="5" min="0" max="90" data-path="meal2.mins" data-type="num"></div>
+          </div>
+          <div class="grid2">
+            <div><label class="f" for="f-m2p">Preferred start <span style="font-weight:400">(blank = auto)</span></label><input id="f-m2p" type="time" step="900" data-path="meal2.pref"></div>
+            <div><label class="f" for="f-m2paid">This break is</label>
+              <select id="f-m2paid" data-path="meal2.paid" data-type="bool"><option value="false">Unpaid</option><option value="true">Paid</option></select></div>
+          </div>
+          <p class="hint">If the preferred time would still leave more than 5 hrs in a row, it moves to the nearest time that doesn't.</p>
+        </div>
+
+        <h3 class="sub">Paid rest breaks</h3>
+        <label class="check"><input type="checkbox" data-path="breaks.on"> Add a rest break whenever you'd otherwise work too long without one</label>
+        <div class="grid2" id="restFields">
+          <div><label class="f" for="f-bx">Longest stretch without a break (hrs)</label><input id="f-bx" type="number" step="0.5" min="1" max="8" data-path="breaks.maxWork" data-type="num"></div>
+          <div><label class="f" for="f-bm">Break length (min)</label><input id="f-bm" type="number" step="5" min="5" max="30" data-path="breaks.mins" data-type="num"></div>
+        </div>
+        <p class="hint">Lunch and meal breaks count as breaks and reset the clock, so a rest break only appears where you'd otherwise go longer than this with no break at all.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>4 · Fixed commitments</summary>
+      <div class="sec">
+        <p class="hint">Recurring meetings, group sessions, rounds — anything with a set time. These are placed first and everything else works around them.</p>
+        <div id="cList"></div>
+        <button class="btn small" data-add="commitments">+ Add commitment</button>
+      </div>
+    </details>
+
+    <details open>
+      <summary>5 · Client appointments</summary>
+      <div class="sec">
+        <label class="check"><input type="checkbox" data-path="appts.on"> Schedule bookable client appointment slots</label>
+        <div class="grid2">
+          <div><label class="f" for="f-al">Label</label><input id="f-al" data-path="appts.label"></div>
+          <div><label class="f" for="f-ap">% of flexible time</label><input id="f-ap" type="number" min="0" max="100" step="5" data-path="appts.pct" data-type="num"></div>
+        </div>
+        <div class="grid3">
+          <div><label class="f" for="f-alen">Length (min)</label><input id="f-alen" type="number" min="10" max="240" step="5" data-path="appts.len" data-type="num"></div>
+          <div><label class="f" for="f-abuf">Notes after (min)</label><input id="f-abuf" type="number" min="0" max="60" step="5" data-path="appts.buf" data-type="num"></div>
+          <div><label class="f" for="f-apref">Prefer</label>
+            <select id="f-apref" data-path="appts.pref"><option value="any">Any time</option><option value="am">Mornings</option><option value="pm">Afternoons</option></select></div>
+        </div>
+        <div class="grid2" style="align-items:end">
+          <div><label class="f" for="f-amax">Max per day</label><input id="f-amax" type="number" min="0" max="20" step="1" data-path="appts.maxPerDay" data-type="num"></div>
+          <label class="toggle" title="Book as many appointments as fit in your windows — ignores the daily max and the % of flexible time">
+            <input type="checkbox" data-path="appts.maximize"><span><b>Maximize patient time</b><small>No daily cap</small></span></label>
+        </div>
+        <p class="hint" id="maxHint" hidden>Maximizing: appointments fill every slot that fits in the windows below. The task mix then shares whatever time is left.</p>
+        <label class="f" style="margin-top:10px">Appointment windows — appointments must start and finish inside these. Leave a pair blank for no window.</label>
+        <table class="daysTbl winTbl" id="winTbl"></table>
+        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:8px">
+          <button class="btn small" data-act="copywin">Copy Monday's windows to all days</button>
+          <span style="display:flex;gap:6px;align-items:center"><input type="color" data-path="appts.color" aria-label="Appointment colour"><span class="hint" style="margin:0">Colour</span></span>
+        </div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>6 · Task mix</summary>
+      <div class="sec">
+        <p class="hint">How the rest of your flexible time is split. Block = preferred chunk size. Anything left over becomes flex / catch-up time.</p>
+        <div id="kList"></div>
+        <button class="btn small" data-add="cats">+ Add task type</button>
+        <p class="sumPct" id="pctSum"></p>
+      </div>
+    </details>
+
+    <details class="help">
+      <summary>How it works</summary>
+      <div class="sec">
+        <ul>
+          <li><b>Flexible time</b> = paid working time minus fixed commitments and breaks. Appointment and task-mix percentages are shares of this.</li>
+          <li>Order of placement: fixed commitments → meals → breaks → appointments (spread evenly across days) → task mix → flex.</li>
+          <li><b>Maximize patient time</b> books every appointment that fits inside your windows, with no daily cap. Task-mix percentages then apply to whatever time is left.</li>
+          <li>Appointments get a notes buffer straight after, counted as client time.</li>
+          <li>Settings save automatically in this browser only — nothing is sent anywhere. Use Export to back them up or move them to another computer.</li>
+          <li>Please don't enter client names or health information; slots are generic.</li>
+        </ul>
+      </div>
+    </details>
+  </aside>
+
+  <!-- ============ OUTPUT ============ -->
+  <main class="panel out">
+    <div class="print-head"><h1 id="phTitle"></h1><span id="phMeta"></span></div>
+    <div class="chips" id="chips"></div>
+    <ul class="warnings" id="warnings" hidden></ul>
+    <div class="calWrap"><div class="cal" id="cal"></div></div>
+    <div class="legend" id="legend"></div>
+
+    <div class="page2">
+      <h2>Week summary</h2>
+      <table class="sum" id="sumTbl"></table>
+      <h2>Break schedule</h2>
+      <div class="slots" id="breakSched"></div>
+      <h2 id="slotsH">Bookable appointment slots</h2>
+      <div class="slots" id="slots"></div>
+      <p class="foot no-print">Settings are saved in this browser only. Generated schedules are a starting point — check them against your employer's policies and collective agreement.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+'use strict';
+const KEY = 'staffScheduleBuilder.v1';
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAYS_LONG = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const PALETTE = ['#c0782c','#6b5bb5','#2e8a6a','#b8475a','#7a8a2f','#3b8fa3','#8a5a3b','#5a6fb8'];
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toMin = s => { if (!s || !/^\d{1,2}:\d{2}/.test(s)) return null; const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+const toHHMM = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const fmtT = m => Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0');
+const fmtH = m => { const h = Math.round(m / 60 * 100) / 100; return h + ' h'; };
+const r15 = m => Math.round(m / 15) * 15;
+const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
+function mondayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function isoDate(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function parseDate(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : mondayOf(new Date()); }
+function textOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return '#fff';
+  const n = parseInt(m[1], 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 165 ? '#1c2430' : '#fff';
+}
+function getPath(o, p) { return p.split('.').reduce((a, k) => a == null ? a : a[k], o); }
+function setPath(o, p, v) { const ks = p.split('.'); let a = o; for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]]; a[ks[ks.length - 1]] = v; }
+
+/* ---------- state ---------- */
+function defaultWin(earliest, latest) { return { amS: earliest || '08:30', amE: '12:00', pmS: '13:00', pmE: latest || '16:00' }; }
+function defaults() {
+  return {
+    name: '', role: '', weekStart: isoDate(mondayOf(new Date())),
+    fte: 1, fullTime: 35,
+    days: DAYS.map((d, i) => ({ on: i < 5, start: '08:30', end: '16:00' })),
+    lunch: { mins: 30, paid: false, pref: '12:00' },
+    autoMeals: true,
+    meal2: { label: 'Dinner break', mins: 30, pref: '', paid: false },
+    breaks: { on: true, maxWork: 5, mins: 15 },
+    commitments: [
+      { title: 'Team meeting', day: 0, start: '09:00', end: '10:00' },
+      { title: 'Group education session', day: 2, start: '13:00', end: '15:00' }
+    ],
+    appts: { on: true, label: 'Client appointment', pct: 55, len: 60, buf: 15, maxPerDay: 4, maximize: false, pref: 'any', color: '#2f6f9f',
+      win: DAYS.map(() => defaultWin()) },
+    cats: [
+      { name: 'Admin / charting', pct: 20, block: 60, pref: 'pm', color: '#c0782c' },
+      { name: 'Program prep', pct: 10, block: 60, pref: 'any', color: '#6b5bb5' },
+      { name: 'Professional development', pct: 5, block: 60, pref: 'any', color: '#2e8a6a' }
+    ],
+    fixedColor: '#4a5568'
+  };
+}
+function normalize(s) {
+  const d = defaults();
+  if (!s || typeof s !== 'object') return d;
+  const out = Object.assign(d, s);
+  const d2 = defaults();
+  ['lunch', 'meal2', 'breaks', 'appts'].forEach(k => out[k] = Object.assign(d2[k], (s[k] && typeof s[k] === 'object') ? s[k] : {}));
+  if (!Array.isArray(out.days) || out.days.length !== 7) out.days = d2.days;
+  out.days = out.days.map((x, i) => Object.assign({}, d2.days[i], x));
+  // appointment windows (older saved settings had a single earliest/latest pair)
+  const oldA = (s.appts && typeof s.appts === 'object') ? s.appts : {};
+  if (!Array.isArray(out.appts.win) || out.appts.win.length !== 7 || !Array.isArray(oldA.win)) {
+    out.appts.win = DAYS.map(() => defaultWin(oldA.earliest, oldA.latest));
+  }
+  out.appts.win = out.appts.win.map(w => Object.assign(defaultWin(), w || {}));
+  delete out.appts.earliest; delete out.appts.latest;
+  delete out.breaks.count; delete out.breaks.longCount; delete out.breaks.longHours; // replaced by the max-stretch rule
+  if (!Array.isArray(out.commitments)) out.commitments = [];
+  if (!Array.isArray(out.cats)) out.cats = [];
+  return out;
+}
+function load() { try { const raw = localStorage.getItem(KEY); return normalize(raw ? JSON.parse(raw) : null); } catch (e) { return defaults(); } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ } }
+let state = load();
+
+/* ---------- scheduling engine ---------- */
+function freeSegs(d) {
+  const occ = d.blocks.map(b => [b.s, b.e]).sort((a, b) => a[0] - b[0]);
+  const segs = []; let cur = d.S;
+  for (const [s, e] of occ) {
+    if (cur >= d.E) break;
+    if (s > cur) segs.push([cur, Math.min(s, d.E)]);
+    cur = Math.max(cur, e);
+  }
+  if (cur < d.E) segs.push([cur, d.E]);
+  return segs.filter(([a, b]) => b - a > 0);
+}
+const overlaps = (d, s, e) => d.blocks.some(b => s < b.e && e > b.s);
+function findSlot(d, len, target, lo, hi, pred) {
+  const t0 = r15(target);
+  for (let k = 0; k <= 120; k++) {
+    for (const t of (k === 0 ? [t0] : [t0 + 15 * k, t0 - 15 * k])) {
+      if (t < lo || t + len > hi || t < d.S || t + len > d.E) continue;
+      if (overlaps(d, t, t + len)) continue;
+      if (pred && !pred(t)) continue;
+      return t;
+    }
+  }
+  return null;
+}
+function mealStretches(d) {
+  const meals = d.blocks.filter(b => b.kind === 'meal').sort((a, b) => a.s - b.s);
+  const out = []; let cur = d.S;
+  for (const m of meals) { out.push([cur, m.s]); cur = m.e; }
+  out.push([cur, d.E]);
+  return out.filter(([a, b]) => b > a);
+}
+function placeMeals(d, st, L) {
+  if (L <= 0 || d.E - d.S <= 300) return;
+  const pref = toMin(st.lunch.pref) ?? 720;
+  const add = (t, label) => d.blocks.push({ s: t, e: t + L, kind: 'meal', label, paid: !!st.lunch.paid });
+  let t = findSlot(d, L, pref, d.S, d.E, t => (t - d.S) <= 300 && (d.E - (t + L)) <= 300);
+  if (t == null) t = findSlot(d, L, pref, d.S + 60, d.E - 60);
+  if (t == null) t = findSlot(d, L, pref, d.S, d.E);
+  if (t == null) return;
+  add(t, 'Lunch');
+  // long-day meal break(s): own length, name, paid status and preferred time
+  const M = st.meal2 || {}, L2 = Math.max(0, Math.round(M.mins || 0));
+  if (!st.autoMeals || L2 <= 0) return;
+  const pref2 = toMin(M.pref);
+  for (let g = 0; g < 4; g++) {
+    const s = mealStretches(d).find(([a, b]) => b - a > 300);
+    if (!s) break;
+    const [a, b] = s;
+    const target = (pref2 != null && pref2 > a && pref2 + L2 < b) ? pref2 : a + Math.floor((b - a - L2) / 2);
+    let t2 = findSlot(d, L2, target, a, b, t => (t - a) <= 300 && (b - (t + L2)) <= 300);
+    if (t2 == null) t2 = findSlot(d, L2, target, a, b, t => (t - a) <= 300);
+    if (t2 == null) break;
+    d.blocks.push({ s: t2, e: t2 + L2, kind: 'meal', label: (M.label || '').trim() || 'Meal break', paid: !!M.paid, extra: true });
+  }
+}
+/* work stretches between ANY breaks (lunch, meal breaks and rest breaks all reset the clock) */
+function breakStretches(d) {
+  const br = d.blocks.filter(b => b.kind === 'meal' || b.kind === 'break').sort((a, b) => a.s - b.s);
+  const out = []; let cur = d.S;
+  for (const b of br) { if (b.s > cur) out.push([cur, b.s]); cur = Math.max(cur, b.e); }
+  if (cur < d.E) out.push([cur, d.E]);
+  return out;
+}
+/* rest breaks: only where a stretch would run longer than the limit with no break of any kind */
+function placeBreaks(d, st, bumpAppts) {
+  d.restGap = false;
+  if (!st.breaks.on) return;
+  const X = Math.max(60, Math.round((+st.breaks.maxWork || 5) * 60)), m = Math.max(5, Math.round(st.breaks.mins || 15));
+  const skip = new Set();
+  for (let g = 0; g < 12; g++) {
+    const s = breakStretches(d).find(([a, b]) => b - a > X && !skip.has(a));
+    if (!s) return;
+    const [a, b] = s, target = a + Math.floor((b - a - m) / 2);
+    const both = t => (t - a) <= X && (b - (t + m)) <= X, first = t => (t - a) <= X;
+    let t = findSlot(d, m, target, a, b, both) ?? findSlot(d, m, target, a, b, first);
+    if (t == null && bumpAppts) {
+      // maximize mode: appointments went first; give up the appointment nearest this break's ideal time
+      const ap = d.blocks.filter(x => x.kind === 'appt' && x.s >= a && x.e <= b)
+        .sort((x, y) => Math.abs(x.s - target) - Math.abs(y.s - target))[0];
+      if (ap) {
+        d.blocks = d.blocks.filter(x => x !== ap && !(x.kind === 'notes' && x.s === ap.e));
+        d.appts--;
+        t = findSlot(d, m, target, a, b, both) ?? findSlot(d, m, target, a, b, first);
+      }
+    }
+    if (t == null) {
+      // something fixed (e.g. a long commitment) fills the stretch — flag it, and still break as soon as possible
+      d.restGap = true; skip.add(a);
+      t = findSlot(d, m, a + X, a, b);
+      if (t == null) continue;
+    }
+    d.blocks.push({ s: t, e: t + m, kind: 'break', label: 'Break', paid: true });
+  }
+}
+/* appointment windows for a day: [{s,e,part:'am'|'pm'}] — appointment must start and end inside one */
+function apptWindows(st, i) {
+  const w = (st.appts.win || [])[i] || {}, out = [];
+  const a = [toMin(w.amS), toMin(w.amE)], p = [toMin(w.pmS), toMin(w.pmE)];
+  if (a[0] != null && a[1] != null && a[1] > a[0]) out.push({ s: a[0], e: a[1], part: 'am' });
+  if (p[0] != null && p[1] != null && p[1] > p[0]) out.push({ s: p[0], e: p[1], part: 'pm' });
+  return out;
+}
+function findApptSlot(d, unit, len, wins, pref) {
+  const segs = freeSegs(d);
+  for (const w of wins) {
+    if (pref !== 'any' && w.part !== pref) continue;
+    for (const [a, b] of segs) {
+      const t = Math.ceil(Math.max(a, w.s) / 15) * 15;
+      // appointment inside the window; notes buffer only needs free working time after it
+      if (t + len <= w.e && t + unit <= b) return t;
+    }
+  }
+  return null;
+}
+function bestSeg(d, pref) {
+  let segs = freeSegs(d);
+  if (pref === 'am') segs = segs.filter(([a]) => a < 720).map(([a, b]) => [a, Math.min(b, 720)]);
+  if (pref === 'pm') segs = segs.filter(([, b]) => b > 720).map(([a, b]) => [Math.max(a, 720), b]);
+  segs = segs.filter(([a, b]) => b - a >= 15);
+  if (!segs.length) return null;
+  return segs.reduce((x, y) => (y[1] - y[0]) > (x[1] - x[0]) ? y : x);
+}
+
+function generate(st) {
+  const warn = [];
+  const ws = parseDate(st.weekStart);
+  const L = Math.max(0, Math.round(st.lunch.mins || 0));
+  const active = [];
+  st.days.forEach((dd, i) => {
+    if (!dd.on) return;
+    const date = new Date(ws); date.setDate(ws.getDate() + i);
+    const S = toMin(dd.start), E = toMin(dd.end);
+    if (S == null || E == null || E <= S) { warn.push(`${DAYS_LONG[i]}: end time must be after start time, so the day was skipped.`); return; }
+    active.push({ i, date, S, E, blocks: [], appts: 0 });
+  });
+  const byIdx = {}; active.forEach(d => byIdx[d.i] = d);
+
+  // 1. fixed commitments
+  st.commitments.forEach(c => {
+    const s = toMin(c.start), e = toMin(c.end), t = (c.title || '').trim() || 'Commitment';
+    if (s == null || e == null || e <= s) { warn.push(`“${t}”: end time must be after start time, so it wasn't scheduled.`); return; }
+    const d = byIdx[c.day];
+    if (!d) { warn.push(`“${t}” is on ${DAYS_LONG[c.day] || '?'}, which isn't one of your working days.`); return; }
+    if (s < d.S || e > d.E) warn.push(`“${t}” (${DAYS[c.day]} ${fmtT(s)}–${fmtT(e)}) falls outside your working hours that day.`);
+    if (overlaps(d, s, e)) warn.push(`“${t}” overlaps another commitment on ${DAYS_LONG[c.day]}.`);
+    d.blocks.push({ s, e, kind: 'fixed', label: t });
+  });
+  // 2. meals, 3. breaks
+  active.forEach(d => placeMeals(d, st, L));
+  const A = st.appts, maximize = !!(A.on && A.maximize && A.len > 0);
+  // normally breaks go before appointments; when maximizing, appointments go first and breaks fit around them
+  if (!maximize) active.forEach(d => placeBreaks(d, st));
+
+  let flexTotal = sum(active, d => sum(freeSegs(d), ([a, b]) => b - a));
+  const stats = { flexTotal, appt: null, cats: [] };
+
+  // 4. appointments
+  if (A.on && (maximize || A.pct > 0) && A.len > 0 && active.length) {
+    const len = Math.round(A.len), buf = Math.max(0, Math.round(A.buf || 0)), unit = len + buf;
+    const target = maximize ? Infinity : Math.floor(flexTotal * Math.min(100, A.pct) / 100 / unit);
+    const maxD = maximize ? Infinity : Math.max(0, A.maxPerDay | 0);
+    active.forEach(d => {
+      d.wins = apptWindows(st, d.i);
+      if (!d.wins.length) return;
+      if (d.wins.some(w => w.s < d.S || w.e > d.E)) warn.push(`${DAYS_LONG[d.i]}: an appointment window runs outside your working hours (${fmtT(d.S)}–${fmtT(d.E)}); only the part inside is used.`);
+    });
+    let placed = 0;
+    for (const ph of (A.pref === 'any' ? ['any'] : [A.pref, 'any'])) {
+      let progress = true;
+      while (placed < target && progress) {
+        progress = false;
+        for (const d of active) {
+          if (placed >= target) break;
+          if (d.appts >= maxD || !d.wins.length) continue;
+          const t = findApptSlot(d, unit, len, d.wins, ph);
+          if (t == null) continue;
+          d.blocks.push({ s: t, e: t + len, kind: 'appt', label: A.label || 'Appointment' });
+          if (buf) d.blocks.push({ s: t + len, e: t + unit, kind: 'notes', label: 'Notes' });
+          d.appts++; placed++; progress = true;
+        }
+      }
+    }
+    if (maximize) {
+      active.forEach(d => placeBreaks(d, st, true));
+      placed = sum(active, d => d.appts);
+      // flexible time = free time + appointment time, now that breaks are in
+      flexTotal = stats.flexTotal = sum(active, d => sum(freeSegs(d), ([a, b]) => b - a) + sum(d.blocks.filter(b => b.kind === 'appt' || b.kind === 'notes'), b => b.e - b.s));
+    }
+    stats.appt = { target, placed, unit, len, buf, maximize, targetMin: maximize ? null : Math.round(flexTotal * Math.min(100, A.pct) / 100) };
+    if (!maximize && placed < target) {
+      const capped = active.every(d => d.appts >= maxD || !d.wins.length);
+      warn.push(`Only ${placed} of ${target} appointment slots fit` + (capped ? ` — every day hit your max of ${maxD} per day.` : ` inside your appointment windows. Try widening the windows or moving other commitments.`));
+    }
+    if (maximize && placed === 0) warn.push('No appointments fit — check that your appointment windows overlap your working hours.');
+  }
+
+  // 5. task mix — in maximize mode it shares whatever flexible time the appointments left
+  const mixBase = maximize ? sum(active, d => sum(freeSegs(d), ([a, b]) => b - a)) : flexTotal;
+  stats.mixBase = mixBase;
+  const totalPct = (A.on && !maximize ? (+A.pct || 0) : 0) + sum(st.cats, c => +c.pct || 0);
+  if (totalPct > 100) warn.push(`Your percentages add up to ${totalPct}% — the last task types in the list may not get their full share.`);
+  const n = active.length;
+  st.cats.forEach((c, ci) => {
+    const name = (c.name || '').trim() || 'Task';
+    const target = r15(mixBase * Math.max(0, +c.pct || 0) / 100);
+    let rem = target, planned = 0;
+    const blockLen = Math.max(15, Math.round(c.block || 60));
+    for (const ph of (c.pref === 'any' || !c.pref ? ['any'] : [c.pref, 'any'])) {
+      let progress = true;
+      while (rem >= 15 && progress && n) {
+        progress = false;
+        for (let k = 0; k < n; k++) {
+          if (rem < 15) break;
+          const d = active[(k + ci) % n];
+          const seg = bestSeg(d, ph);
+          if (!seg) continue;
+          const [a, b] = seg, segLen = b - a;
+          let len = Math.min(blockLen, rem, segLen);
+          if (segLen - len > 0 && segLen - len < 15 && rem >= segLen) len = segLen;
+          d.blocks.push({ s: a, e: a + len, kind: 'cat', ci, label: name });
+          rem -= len; planned += len; progress = true;
+        }
+      }
+    }
+    stats.cats.push({ name, color: c.color, target, planned });
+    if (planned < target - 15) warn.push(`Only ${fmtH(planned)} of the ${fmtH(target)} target fit for “${name}”.`);
+  });
+
+  // 6. flex
+  active.forEach(d => freeSegs(d).forEach(([a, b]) => { if (b - a >= 5) d.blocks.push({ s: a, e: b, kind: 'flex', label: 'Flex / catch-up' }); }));
+  active.forEach(d => {
+    d.blocks.sort((x, y) => x.s - y.s);
+    const merged = [];
+    for (const b of d.blocks) {
+      const p = merged[merged.length - 1];
+      if (p && p.e === b.s && (b.kind === 'cat' || b.kind === 'flex') && p.kind === b.kind && p.ci === b.ci) p.e = b.e;
+      else merged.push(b);
+    }
+    d.blocks = merged;
+  });
+
+  // checks
+  const paid = sum(active, d => (d.E - d.S) - sum(d.blocks.filter(b => b.kind === 'meal' && !b.paid), b => b.e - b.s));
+  const targetPaid = Math.round((+st.fte || 0) * (+st.fullTime || 0) * 60);
+  stats.paid = paid; stats.targetPaid = targetPaid;
+  if (Math.abs(paid - targetPaid) >= 15) warn.push(`Your working days give ${fmtH(paid)} paid, but your FTE target is ${fmtH(targetPaid)} (${paid > targetPaid ? '+' : '−'}${fmtH(Math.abs(paid - targetPaid))}). Adjust your days or use “Fit end times to my FTE”.`);
+  const esa = [];
+  active.forEach(d => { if (mealStretches(d).some(([a, b]) => b - a > 300)) esa.push(DAYS[d.i]); });
+  stats.esa = esa;
+  if (esa.length) warn.push(`${esa.join(', ')}: more than 5 hours in a row without a 30-min eating period. Under the Ontario ESA you're generally entitled to one at least every 5 hours.`);
+  active.forEach(d => { if (d.restGap) warn.push(`${DAYS_LONG[d.i]}: a fixed commitment leaves no room for a break, so you'd work more than ${+st.breaks.maxWork || 5} hrs in a row without one.`); });
+  const shortMeal =active.some(d => d.blocks.some(b => b.kind === 'meal' && b.e - b.s < 30));
+  if (shortMeal) warn.push('One of your meal breaks is under 30 minutes. The ESA eating period is 30 minutes (it can be split into two periods if you and your employer agree).');
+  if (!st.autoMeals && esa.length) warn.push('Tip: turn on the long-day meal break in section 3 to fix the 5-hour gap automatically.');
+
+  const totals = { fixed: 0, appt: 0, notes: 0, flex: 0, break: 0, mealPaid: 0, mealUnpaid: 0 };
+  active.forEach(d => d.blocks.forEach(b => {
+    const m = b.e - b.s;
+    if (b.kind === 'meal') totals[b.paid ? 'mealPaid' : 'mealUnpaid'] += m;
+    else if (b.kind in totals) totals[b.kind] += m;
+  }));
+  stats.totals = totals;
+  return { active, warn, stats };
+}
+
+/* fit end times so paid hours match FTE */
+function fitEndTimes() {
+  const on = state.days.map((d, i) => ({ d, i })).filter(x => x.d.on && toMin(x.d.start) != null);
+  if (!on.length) return;
+  const target = Math.round((+state.fte || 0) * (+state.fullTime || 0) * 60);
+  const L = Math.max(0, Math.round(state.lunch.mins || 0));
+  const L2 = Math.max(0, Math.round((state.meal2 || {}).mins || 0));
+  // lunch once the day passes 5 hrs; each further 5 hrs adds a long-day meal break (if enabled)
+  const spanFor = W => {
+    if (W <= 300 || L <= 0) return W;
+    const extras = (state.autoMeals && L2 > 0) ? Math.max(0, Math.ceil(W / 300) - 2) : 0;
+    return W + (state.lunch.paid ? 0 : L) + (state.meal2.paid ? 0 : extras * L2);
+  };
+  // a day must run at least until its last fixed commitment ends
+  const minEnd = x => Math.max(0, ...state.commitments.filter(c => +c.day === x.i && toMin(c.end) != null).map(c => toMin(c.end)));
+  let free = on.slice(), remaining = target;
+  // iteratively pin days whose even share would end before their last commitment
+  for (let g = 0; g < 7; g++) {
+    const share = free.length ? remaining / free.length : 0;
+    const need = free.filter(x => toMin(x.d.start) + spanFor(Math.round(share / 15) * 15) < minEnd(x));
+    if (!need.length) break;
+    need.forEach(x => {
+      // smallest paid time (15-min steps) whose span reaches the commitment
+      let W = 15; while (toMin(x.d.start) + spanFor(W) < minEnd(x) && W < 1440) W += 15;
+      x.W = W; remaining -= W;
+    });
+    free = free.filter(x => !need.includes(x));
+  }
+  const units = Math.max(0, Math.round(remaining / 15)), base = free.length ? Math.floor(units / free.length) : 0, extra = units - base * free.length;
+  free.forEach((x, k) => x.W = (base + (k < extra ? 1 : 0)) * 15);
+  on.forEach(x => { x.d.end = toHHMM(Math.min(24 * 60 - 1, toMin(x.d.start) + spanFor(x.W))); });
+}
+
+/* ---------- form ---------- */
+function renderDays() {
+  $('#daysTbl').innerHTML = '<tr><td></td><td><label class="f">Start</label></td><td><label class="f">End</label></td></tr>' +
+    DAYS.map((d, i) => `<tr><td><label><input type="checkbox" data-path="days.${i}.on"> ${d}</label></td>
+      <td><input type="time" step="900" data-path="days.${i}.start" aria-label="${d} start"></td>
+      <td><input type="time" step="900" data-path="days.${i}.end" aria-label="${d} end"></td></tr>`).join('');
+}
+function renderWindows() {
+  $('#winTbl').innerHTML = '<tr><th></th><th>AM from</th><th>AM until</th><th>PM from</th><th>PM until</th></tr>' +
+    DAYS.map((d, i) => `<tr data-winday="${i}"><td>${d}</td>` +
+      ['amS', 'amE', 'pmS', 'pmE'].map(k => `<td><input type="time" step="900" data-path="appts.win.${i}.${k}" aria-label="${d} ${k}"></td>`).join('') + '</tr>').join('');
+}
+function renderCommitments() {
+  $('#cList').innerHTML = state.commitments.map((c, i) => `<div class="listRow cRow">
+    <div><label class="f">Title</label><input data-path="commitments.${i}.title"></div>
+    <div><label class="f">Day</label><select data-path="commitments.${i}.day" data-type="num">${DAYS.map((d, j) => `<option value="${j}">${d}</option>`).join('')}</select></div>
+    <div><label class="f">Start</label><input type="time" step="900" data-path="commitments.${i}.start"></div>
+    <div><label class="f">End</label><input type="time" step="900" data-path="commitments.${i}.end"></div>
+    <button class="btn x" data-del="commitments" data-i="${i}" title="Remove" aria-label="Remove commitment">×</button></div>`).join('') || '<p class="hint">No fixed commitments.</p>';
+}
+function renderCats() {
+  $('#kList').innerHTML = state.cats.map((c, i) => `<div class="listRow kRow">
+    <div><label class="f">Task type</label><input data-path="cats.${i}.name"></div>
+    <div><label class="f">%</label><input type="number" min="0" max="100" step="5" data-path="cats.${i}.pct" data-type="num"></div>
+    <div><label class="f">Block</label><select data-path="cats.${i}.block" data-type="num">${[15, 30, 45, 60, 90, 120, 180].map(v => `<option value="${v}">${v} min</option>`).join('')}</select></div>
+    <div><label class="f">When</label><select data-path="cats.${i}.pref"><option value="any">Any</option><option value="am">AM</option><option value="pm">PM</option></select></div>
+    <div><label class="f">&nbsp;</label><input type="color" data-path="cats.${i}.color" aria-label="Colour"></div>
+    <button class="btn x" data-del="cats" data-i="${i}" title="Remove" aria-label="Remove task type">×</button></div>`).join('') || '<p class="hint">No task types — all remaining time becomes flex.</p>';
+}
+function fillForm() {
+  document.querySelectorAll('[data-path]').forEach(el => {
+    const v = getPath(state, el.dataset.path);
+    if (el.type === 'checkbox') el.checked = !!v;
+    else el.value = v == null ? '' : String(v);
+  });
+}
+function renderForm() { renderDays(); renderWindows(); renderCommitments(); renderCats(); fillForm(); }
+
+let timer = null;
+function changed() { save(); clearTimeout(timer); timer = setTimeout(update, 120); }
+
+document.getElementById('controls').addEventListener('input', onField);
+document.getElementById('controls').addEventListener('change', onField);
+function onField(e) {
+  const el = e.target.closest('[data-path]'); if (!el) return;
+  let v;
+  if (el.type === 'checkbox') v = el.checked;
+  else if (el.dataset.type === 'num') { v = parseFloat(el.value); if (isNaN(v)) v = 0; }
+  else if (el.dataset.type === 'bool') v = el.value === 'true';
+  else v = el.value;
+  setPath(state, el.dataset.path, v);
+  changed();
+}
+document.addEventListener('click', e => {
+  const add = e.target.closest('[data-add]'), del = e.target.closest('[data-del]'), act = e.target.closest('[data-act]');
+  if (add) {
+    if (add.dataset.add === 'commitments') state.commitments.push({ title: 'New commitment', day: 0, start: '10:00', end: '11:00' });
+    else state.cats.push({ name: 'New task', pct: 5, block: 60, pref: 'any', color: PALETTE[state.cats.length % PALETTE.length] });
+    renderForm(); changed();
+  } else if (del) {
+    state[del.dataset.del].splice(+del.dataset.i, 1); renderForm(); changed();
+  } else if (act) {
+    const a = act.dataset.act;
+    if (a === 'print') window.print();
+    if (a === 'fit') { fitEndTimes(); fillForm(); changed(); }
+    if (a === 'copywin') { const m = state.appts.win[0]; state.appts.win = DAYS.map(() => Object.assign({}, m)); fillForm(); changed(); }
+    if (a === 'reset' && confirm('Reset all settings to the defaults?')) { state = defaults(); renderForm(); changed(); }
+    if (a === 'export') {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = 'schedule-settings' + (state.name ? '-' + state.name.trim().replace(/\s+/g, '-').toLowerCase() : '') + '.json';
+      document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    if (a === 'import') $('#importFile').click();
+  }
+});
+$('#importFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { state = normalize(JSON.parse(r.result)); renderForm(); changed(); } catch (err) { alert('That file could not be read as schedule settings.'); } };
+  r.readAsText(f); e.target.value = '';
+});
+
+/* ---------- output ---------- */
+function blockColor(b) {
+  if (b.kind === 'fixed') return state.fixedColor;
+  if (b.kind === 'appt' || b.kind === 'notes') return state.appts.color;
+  if (b.kind === 'cat') return (state.cats[b.ci] || {}).color || '#888';
+  return '#ccc';
+}
+function update() {
+  const res = generate(state), st = res.stats;
+  const target = Math.round((+state.fte || 0) * (+state.fullTime || 0) * 60);
+  $('#targetHint').textContent = `Target: ${fmtH(target)} paid per week.`;
+  const maximize = !!(state.appts.on && state.appts.maximize);
+  const pct = (state.appts.on && !maximize ? (+state.appts.pct || 0) : 0) + sum(state.cats, c => +c.pct || 0);
+  $('#pctSum').innerHTML = (maximize ? `Task mix = <b class="${pct > 100 ? 'bad' : ''}">${pct}%</b> of the time left after appointments`
+    : `Appointments + task mix = <b class="${pct > 100 ? 'bad' : ''}">${pct}%</b>`) + (pct < 100 ? ` · ${100 - pct}% left for flex` : '');
+  // maximize disables the daily cap and the % share; off days hide their window row
+  document.querySelectorAll('#meal2Fields input, #meal2Fields select').forEach(el => el.disabled = !state.autoMeals);
+  document.querySelectorAll('#restFields input').forEach(el => el.disabled = !state.breaks.on);
+  $('#f-amax').disabled = maximize; $('#f-ap').disabled = maximize; $('#maxHint').hidden = !maximize;
+  document.querySelectorAll('[data-winday]').forEach(r => r.hidden = !state.days[+r.dataset.winday].on);
+
+  // print header
+  const ws = parseDate(state.weekStart), we = new Date(ws); we.setDate(ws.getDate() + 6);
+  const dOpt = { month: 'short', day: 'numeric' };
+  $('#phTitle').textContent = (state.name ? state.name + ' — ' : '') + 'Week of ' + ws.toLocaleDateString('en-CA', dOpt) + ' – ' + we.toLocaleDateString('en-CA', Object.assign({ year: 'numeric' }, dOpt));
+  $('#phMeta').textContent = [state.role, (+state.fte || 0) + ' FTE', fmtH(st.paid) + ' paid'].filter(Boolean).join(' · ');
+
+  // chips
+  const chips = [];
+  const hoursOk = Math.abs(st.paid - st.targetPaid) < 15;
+  chips.push(`<span class="chip ${hoursOk ? 'ok' : 'warn'}">Paid: ${fmtH(st.paid)} / ${fmtH(st.targetPaid)}</span>`);
+  if (st.appt) chips.push(`<span class="chip ${st.appt.maximize ? (st.appt.placed ? 'ok' : 'warn') : (st.appt.placed >= st.appt.target ? 'ok' : 'warn')}">${st.appt.placed} appointment slot${st.appt.placed === 1 ? '' : 's'}${st.appt.maximize ? ' (maximized)' : ''}</span>`);
+  chips.push(`<span class="chip">Flexible time: ${fmtH(st.flexTotal)}</span>`);
+  if (res.active.length) chips.push(`<span class="chip ${st.esa.length ? 'warn' : 'ok'}">${st.esa.length ? 'ESA eating-period gap' : 'ESA eating periods OK'}</span>`);
+  $('#chips').innerHTML = chips.join('');
+
+  const w = $('#warnings');
+  w.hidden = !res.warn.length;
+  w.innerHTML = res.warn.map(x => `<li>${esc(x)}</li>`).join('');
+
+  renderCal(res);
+  renderLegend(res);
+  renderSummary(res);
+  renderBreaks(res);
+  renderSlots(res);
+}
+function renderCal(res) {
+  const act = res.active, cal = $('#cal');
+  if (!act.length) { cal.style.gridTemplateColumns = '1fr'; cal.innerHTML = '<p class="empty">Turn on at least one working day to build a schedule.</p>'; return; }
+  let lo = Math.min(...act.map(d => Math.min(d.S, ...d.blocks.map(b => b.s))));
+  let hi = Math.max(...act.map(d => Math.max(d.E, ...d.blocks.map(b => b.e))));
+  lo = Math.floor(lo / 60) * 60; hi = Math.ceil(hi / 60) * 60;
+  const R = hi - lo, P = m => ((m - lo) / R * 100).toFixed(3) + '%', H = m => (m / R * 100).toFixed(3) + '%';
+  const height = Math.round(R * 1.15);
+  cal.style.gridTemplateColumns = `52px repeat(${act.length}, minmax(0,1fr))`;
+  let html = '<div class="hd"></div>' + act.map(d => `<div class="hd">${DAYS[d.i]}<small>${d.date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })} · ${fmtT(d.S)}–${fmtT(d.E)}</small></div>`).join('');
+  let axis = '';
+  for (let t = lo; t < hi; t += 60) axis += `<div class="tick" style="top:${P(t)}">${fmtT(t)}</div>`;
+  html += `<div class="axis calBody" style="height:${height}px">${axis}</div>`;
+  for (const d of act) {
+    let inner = '';
+    if (d.S > lo) inner += `<div class="off" style="top:0;height:${H(d.S - lo)}"></div>`;
+    if (d.E < hi) inner += `<div class="off" style="top:${P(d.E)};bottom:0"></div>`;
+    for (const b of d.blocks) {
+      const dur = b.e - b.s, c = blockColor(b);
+      const tiny = dur < 30;
+      const label = dur >= 15 ? `<b>${esc(b.kind === 'notes' && dur < 20 ? '' : b.label)}</b>` : '';
+      const time = dur >= 45 ? `<span>${fmtT(b.s)}–${fmtT(b.e)}</span>` : '';
+      inner += `<div class="blk k-${b.kind}${tiny ? ' tiny' : ''}" style="top:${P(b.s)};height:${H(dur)};--c:${c};--t:${textOn(c)}" title="${esc(b.label)} · ${fmtT(b.s)}–${fmtT(b.e)}">${label}${time}</div>`;
+    }
+    html += `<div class="col calBody" style="height:${height}px;--hours:${R / 60}">${inner}</div>`;
+  }
+  cal.innerHTML = html;
+}
+function renderLegend(res) {
+  const items = [];
+  if (state.commitments.length) items.push(`<span><i style="--c:${state.fixedColor}"></i>Fixed commitment</span>`);
+  if (state.appts.on) items.push(`<span><i style="--c:${state.appts.color}"></i>${esc(state.appts.label || 'Appointment')}</span><span><i style="--c:${state.appts.color};opacity:.5"></i>Notes</span>`);
+  state.cats.forEach(c => items.push(`<span><i style="--c:${c.color}"></i>${esc(c.name)}</span>`));
+  items.push('<span><i class="hatch"></i>Breaks (lunch, meal, rest)</span><span><i class="flex"></i>Flex / catch-up</span>');
+  $('#legend').innerHTML = items.join('');
+}
+function renderSummary(res) {
+  const st = res.stats, t = st.totals, rows = [];
+  const row = (color, name, planned, target, extra) => `<tr><td>${color ? `<span class="dot" style="--c:${color}"></span>` : ''}${esc(name)}${extra ? ` <span style="color:var(--muted)">${esc(extra)}</span>` : ''}</td><td class="n">${fmtH(planned)}</td><td class="n">${target == null ? '—' : fmtH(target)}</td><td class="n">${st.flexTotal ? Math.round(planned / st.flexTotal * 100) + '%' : '—'}</td></tr>`;
+  rows.push('<tr class="grp"><td colspan="4">Work</td></tr>');
+  if (t.fixed) rows.push(`<tr><td><span class="dot" style="--c:${state.fixedColor}"></span>Fixed commitments</td><td class="n">${fmtH(t.fixed)}</td><td class="n">—</td><td class="n"></td></tr>`);
+  if (st.appt) rows.push(row(state.appts.color, state.appts.label || 'Appointments', t.appt + t.notes, st.appt.targetMin, `(${st.appt.placed} × ${st.appt.len} min + ${st.appt.buf} min notes)`));
+  st.cats.forEach(c => rows.push(row(c.color, c.name, c.planned, c.target)));
+  rows.push(row(null, 'Flex / catch-up', t.flex, null));
+
+  // Breaks: lunch, long-day meal break(s) and paid rest breaks, grouped together
+  const all = res.active.flatMap(d => d.blocks);
+  const grp = (pick) => { const b = all.filter(pick); return { n: b.length, m: sum(b, x => x.e - x.s), paid: b.length ? b.every(x => x.paid) : false, mixed: b.some(x => x.paid) && b.some(x => !x.paid) }; };
+  const lunch = grp(b => b.kind === 'meal' && !b.extra), meal2 = grp(b => b.kind === 'meal' && b.extra), rest = grp(b => b.kind === 'break');
+  const brow = (name, g, note) => g.n ? `<tr${g.paid ? '' : ' style="color:var(--muted)"'}><td><span class="dot" style="--c:#c9d0d9"></span>${esc(name)} <span style="color:var(--muted)">(${g.n}× · ${g.paid ? 'paid' : g.mixed ? 'some paid' : 'unpaid, not counted in paid hours'}${note ? ' · ' + note : ''})</span></td><td class="n">${fmtH(g.m)}</td><td class="n">—</td><td class="n"></td></tr>` : '';
+  rows.push('<tr class="grp"><td colspan="4">Breaks</td></tr>');
+  rows.push(brow('Lunch', lunch, 'ESA eating period'));
+  rows.push(brow((state.meal2.label || '').trim() || 'Meal break', meal2, 'ESA eating period, long days'));
+  rows.push(brow('Paid rest breaks', rest));
+  if (!lunch.n && !meal2.n && !rest.n) rows.push('<tr><td colspan="4" style="color:var(--muted)">No breaks scheduled.</td></tr>');
+  rows.push(`<tr class="total"><td>Total paid</td><td class="n">${fmtH(st.paid)}</td><td class="n">${fmtH(st.targetPaid)}</td><td class="n"></td></tr>`);
+  $('#sumTbl').innerHTML = `<thead><tr><th>Block</th><th class="n">Planned</th><th class="n">Target</th><th class="n">% of flexible</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+}
+function renderBreaks(res) {
+  const html = res.active.map(d => {
+    const b = d.blocks.filter(x => x.kind === 'meal' || x.kind === 'break');
+    return `<div><b>${DAYS_LONG[d.i]}, ${d.date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}</b>${b.length
+      ? `<ul style="margin:0;padding-left:18px">${b.map(x => `<li>${fmtT(x.s)}–${fmtT(x.e)} ${esc(x.label)} <small>${x.paid ? 'paid' : 'unpaid'}</small></li>`).join('')}</ul>`
+      : '<span style="color:var(--muted)">No breaks</span>'}</div>`;
+  }).join('');
+  $('#breakSched').innerHTML = html || '<p class="hint">No working days.</p>';
+}
+function renderSlots(res) {
+  const show = state.appts.on;
+  $('#slotsH').hidden = !show; $('#slots').hidden = !show;
+  if (!show) return;
+  const html = res.active.map(d => {
+    const a = d.blocks.filter(b => b.kind === 'appt');
+    return `<div><b>${DAYS_LONG[d.i]}, ${d.date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}</b>${a.length ? `<ol>${a.map(b => `<li>${fmtT(b.s)}–${fmtT(b.e)}</li>`).join('')}</ol>` : '<span style="color:var(--muted)">No slots</span>'}</div>`;
+  }).join('');
+  $('#slots').innerHTML = html || '<p class="hint">No working days.</p>';
+}
+
+renderForm();
+update();
+</script>
+</body>
+</html>
