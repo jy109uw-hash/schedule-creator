@@ -24,7 +24,7 @@ header.app p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
 .btn.small{padding:4px 9px;font-size:12.5px}
 .btn.x{border:0;background:none;color:var(--muted);padding:4px 6px;font-size:16px;line-height:1}
 .btn.x:hover{color:#b42318;background:none}
-.layout{display:grid;grid-template-columns:390px minmax(0,1fr);gap:16px;padding:16px;max-width:1560px;margin:0 auto}
+.layout{display:grid;grid-template-columns:430px minmax(0,1fr);gap:16px;padding:16px;max-width:1560px;margin:0 auto}
 @media (max-width:960px){.layout{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0}
 .controls details{border-bottom:1px solid var(--line)}
@@ -59,6 +59,7 @@ table.sum tr.grp td{font-size:11.5px;text-transform:uppercase;letter-spacing:.04
 .gDays label:has(input:checked){background:#e8f3f7;border-color:var(--accent)}
 .gDays input{width:13px;height:13px}
 .gDays label.offday{opacity:.45}
+.gHours{margin:2px 0 8px;max-width:300px}
 .gGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .gGrid .f{font-size:11px}
 .toggle{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:5px 8px;cursor:pointer;min-height:33px}
@@ -67,13 +68,25 @@ table.sum tr.grp td{font-size:11.5px;text-transform:uppercase;letter-spacing:.04
 .toggle small{font-size:11px;color:var(--muted)}
 .toggle:has(input:checked){border-color:var(--accent);background:#e8f3f7}
 input:disabled{background:var(--soft);color:var(--muted)}
-.winTbl td{padding:2px}
-.winTbl td:first-child{width:38px;font-weight:500;font-size:13px}
-.winTbl input{padding:4px 3px;font-size:12.5px}
-.winTbl th{font-size:11px;color:var(--muted);font-weight:500;text-align:left;padding:0 2px}
+.winTbl{table-layout:fixed}
+.winTbl tr + tr td{border-top:1px dashed var(--line)}
+.winTbl td{padding:5px 2px;vertical-align:middle}
+.winTbl td:first-child{width:42px;font-weight:600;font-size:13px}
+.wLine{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:center;gap:4px}
+.wLine + .wLine{margin-top:4px}
+.wTag{font-size:11px;color:var(--muted);font-weight:600}
+.winTbl th{font-size:11px;color:var(--muted);font-weight:500;text-align:left;padding:0 2px 2px}
+.wPair{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,1fr);align-items:center;gap:2px}
+.wPair span{text-align:center;color:var(--muted);font-size:12px}
+.winTbl input{padding:4px 2px 4px 4px;font-size:12.5px}
 .listRow{display:grid;gap:6px;align-items:end;padding:8px 0;border-top:1px dashed var(--line)}
 .listRow:first-child{border-top:0}
-.cRow{grid-template-columns:1fr 64px 74px 74px 26px}
+.cRow{grid-template-columns:76px minmax(0,1fr) minmax(0,1fr) 26px;align-items:end}
+.cRow .cTitle{grid-column:1 / 4}
+.cRow .btn.x{grid-column:4;grid-row:1;align-self:end}
+.cRow .cTimes{display:contents}
+.cRow .dur{grid-column:1 / 4;font-size:11.5px;color:var(--muted);margin-top:-2px}
+input[type=time]{font-variant-numeric:tabular-nums;min-width:0;padding-right:4px}
 .kRow{grid-template-columns:1fr 54px 66px 62px 34px 26px}
 .listRow .f{font-size:11px}
 .sumPct{font-size:12.5px;margin:8px 0 0;color:var(--muted)}
@@ -324,7 +337,7 @@ function setPath(o, p, v) { const ks = p.split('.'); let a = o; for (let i = 0; 
 
 /* ---------- state ---------- */
 function normGroup(g) {
-  const out = Object.assign({ name: 'Clients', color: '#2f6f9f', days: DAYS.map((d, i) => i < 5), len: 60, buf: 15, maxPerDay: 4, pct: 20, pref: 'any' }, g || {});
+  const out = Object.assign({ name: 'Clients', color: '#2f6f9f', days: DAYS.map((d, i) => i < 5), len: 60, buf: 15, maxPerDay: 4, pct: 20, pref: 'any', from: '', until: '' }, g || {});
   if (!Array.isArray(out.days) || out.days.length !== 7) out.days = DAYS.map((d, i) => i < 5);
   out.days = out.days.map(Boolean);
   return out;
@@ -491,6 +504,11 @@ function apptWindows(st, i) {
   if (p[0] != null && p[1] != null && p[1] > p[0]) out.push({ s: p[0], e: p[1], part: 'pm' });
   return out;
 }
+/* a group's usable windows on a day: the shared windows, clipped to the group's own hours */
+function groupWins(g, d) {
+  const lo = g.from ?? -Infinity, hi = g.until ?? Infinity;
+  return (d.wins || []).map(w => ({ s: Math.max(w.s, lo), e: Math.min(w.e, hi), part: w.part })).filter(w => w.e > w.s);
+}
 function findApptSlot(d, unit, len, wins, pref) {
   const segs = freeSegs(d);
   for (const w of wins) {
@@ -540,7 +558,7 @@ function generate(st) {
   active.forEach(d => placeMeals(d, st, L));
   const A = st.appts;
   const groups = (A.on ? A.groups : []).map((g, gi) => ({
-    gi, name: (g.name || '').trim() || `Group ${gi + 1}`, color: g.color, days: g.days, pref: g.pref || 'any',
+    gi, name: (g.name || '').trim() || `Group ${gi + 1}`, color: g.color, days: g.days, pref: g.pref || 'any', from: toMin(g.from), until: toMin(g.until),
     len: Math.round(+g.len || 0), buf: Math.max(0, Math.round(+g.buf || 0)), pct: Math.max(0, +g.pct || 0), maxPerDay: Math.max(0, g.maxPerDay | 0)
   })).filter(g => g.len > 0);
   const maximize = !!(A.on && A.maximize && groups.length);
@@ -564,6 +582,10 @@ function generate(st) {
       g.maxD = maximize ? Infinity : g.maxPerDay;
       g.placed = 0;
       g.dayList = active.filter(d => g.days[d.i]);
+      g.hoursBad = true;
+      if (g.from != null && g.until != null && g.until <= g.from) warn.push(`“${g.name}”: its hours end before they start (${fmtT(g.from)}–${fmtT(g.until)}).`);
+      else if (g.dayList.length && g.dayList.every(d => !groupWins(g, d).some(w => w.e - w.s >= g.len))) warn.push(`“${g.name}”: its hours${g.from != null || g.until != null ? ` (${g.from != null ? fmtT(g.from) : 'start'}–${g.until != null ? fmtT(g.until) : 'end'})` : ''} don't overlap the appointment windows on its days by at least ${g.len} min.`);
+      else g.hoursBad = false;
       if (!g.days.some(Boolean)) warn.push(`“${g.name}” has no days selected, so no appointments were booked.`);
       else if (!g.dayList.length) warn.push(`“${g.name}” runs only on days you aren't working.`);
     });
@@ -577,7 +599,7 @@ function generate(st) {
           for (let k = 0; k < order.length; k++) {
             const g = order[(k + pass) % order.length];
             if (g.placed >= g.target || (d.gCount[g.gi] || 0) >= g.maxD || !d.wins.length) continue;
-            const t = findApptSlot(d, g.unit, g.len, d.wins, phase === 'pref' ? g.pref : 'any');
+            const t = findApptSlot(d, g.unit, g.len, groupWins(g, d), phase === 'pref' ? g.pref : 'any');
             if (t == null) continue;
             d.blocks.push({ s: t, e: t + g.len, kind: 'appt', gi: g.gi, label: g.name });
             if (g.buf) d.blocks.push({ s: t + g.len, e: t + g.unit, kind: 'notes', gi: g.gi, label: 'Notes' });
@@ -596,10 +618,10 @@ function generate(st) {
     groups.forEach(g => {
       stats.groups.push({ gi: g.gi, name: g.name, color: g.color, placed: g.placed, target: g.target, len: g.len, buf: g.buf,
         minutes: g.placed * g.unit, targetMin: maximize ? null : Math.round(flexTotal * Math.min(100, g.pct) / 100) });
-      if (!g.dayList.length) return;
+      if (!g.dayList.length || g.hoursBad) return;
       if (!maximize && g.placed < g.target) {
         const capped = g.dayList.every(d => (d.gCount[g.gi] || 0) >= g.maxD || !d.wins.length);
-        warn.push(`“${g.name}”: only ${g.placed} of ${g.target} appointments fit` + (capped ? ` — every one of its days hit the max of ${g.maxD} per day.` : ` inside the appointment windows on its days. Try widening the windows, adding days, or moving other commitments.`));
+        warn.push(`“${g.name}”: only ${g.placed} of ${g.target} appointments fit` + (capped ? ` — every one of its days hit the max of ${g.maxD} per day.` : ` inside ${g.from != null || g.until != null ? 'its hours and ' : ''}the appointment windows on its days. Try widening ${g.from != null || g.until != null ? 'its hours or ' : ''}the windows, adding days, or moving other commitments.`));
       }
       if (maximize && g.placed === 0) warn.push(`“${g.name}”: no appointments fit — check the appointment windows on its days.`);
     });
@@ -717,17 +739,17 @@ function renderDays() {
       <td><input type="time" step="900" data-path="days.${i}.end" aria-label="${d} end"></td></tr>`).join('');
 }
 function renderWindows() {
-  $('#winTbl').innerHTML = '<tr><th></th><th>AM from</th><th>AM until</th><th>PM from</th><th>PM until</th></tr>' +
-    DAYS.map((d, i) => `<tr data-winday="${i}"><td>${d}</td>` +
-      ['amS', 'amE', 'pmS', 'pmE'].map(k => `<td><input type="time" step="900" data-path="appts.win.${i}.${k}" aria-label="${d} ${k}"></td>`).join('') + '</tr>').join('');
+  const pair = (i, d, a, b, lbl, tag) => `<div class="wLine"><span class="wTag">${tag}</span><div class="wPair"><input type="time" step="900" data-path="appts.win.${i}.${a}" aria-label="${d} ${lbl} from"><span>–</span><input type="time" step="900" data-path="appts.win.${i}.${b}" aria-label="${d} ${lbl} until"></div></div>`;
+  $('#winTbl').innerHTML = DAYS.map((d, i) => `<tr data-winday="${i}"><td>${d}</td><td>${pair(i, d, 'amS', 'amE', 'morning', 'AM')}${pair(i, d, 'pmS', 'pmE', 'afternoon', 'PM')}</td></tr>`).join('');
 }
 function renderCommitments() {
   $('#cList').innerHTML = state.commitments.map((c, i) => `<div class="listRow cRow">
-    <div><label class="f">Title</label><input data-path="commitments.${i}.title"></div>
+    <div class="cTitle"><label class="f">Title</label><input data-path="commitments.${i}.title"></div>
+    <button class="btn x" data-del="commitments" data-i="${i}" title="Remove" aria-label="Remove commitment">×</button>
     <div><label class="f">Day</label><select data-path="commitments.${i}.day" data-type="num">${DAYS.map((d, j) => `<option value="${j}">${d}</option>`).join('')}</select></div>
     <div><label class="f">Start</label><input type="time" step="900" data-path="commitments.${i}.start"></div>
     <div><label class="f">End</label><input type="time" step="900" data-path="commitments.${i}.end"></div>
-    <button class="btn x" data-del="commitments" data-i="${i}" title="Remove" aria-label="Remove commitment">×</button></div>`).join('') || '<p class="hint">No fixed commitments.</p>';
+    <div class="dur" data-dur="${i}"></div></div>`).join('') || '<p class="hint">No fixed commitments.</p>';
 }
 function renderCats() {
   $('#kList').innerHTML = state.cats.map((c, i) => `<div class="listRow kRow">
@@ -755,6 +777,8 @@ function renderGroups() {
     </div>
     <label class="f">Days this group is seen</label>
     <div class="gDays">${DAYS.map((d, j) => `<label data-gday="${j}"><input type="checkbox" data-path="appts.groups.${i}.days.${j}">${d}</label>`).join('')}</div>
+    <label class="f">Hours for this group <span style="font-weight:400">(optional — blank = any time in the windows)</span></label>
+    <div class="wPair gHours"><input type="time" step="900" data-path="appts.groups.${i}.from" aria-label="Group hours from"><span>–</span><input type="time" step="900" data-path="appts.groups.${i}.until" aria-label="Group hours until"></div>
     <div class="gGrid">
       <div><label class="f">Length</label><input type="number" min="10" max="240" step="5" data-path="appts.groups.${i}.len" data-type="num" title="Appointment length (min)"></div>
       <div><label class="f">Notes</label><input type="number" min="0" max="60" step="5" data-path="appts.groups.${i}.buf" data-type="num" title="Notes time after each appointment (min)"></div>
@@ -830,6 +854,13 @@ function update() {
   // maximize disables the daily cap and the % share; off days hide their window row
   document.querySelectorAll('#meal2Fields input, #meal2Fields select').forEach(el => el.disabled = !state.autoMeals);
   document.querySelectorAll('#restFields input').forEach(el => el.disabled = !state.breaks.on);
+  state.commitments.forEach((c, i) => {
+    const el = document.querySelector(`[data-dur="${i}"]`); if (!el) return;
+    const a = toMin(c.start), b = toMin(c.end);
+    el.textContent = (a == null || b == null) ? 'Set a start and end time' : b <= a ? '⚠ End time must be after start time'
+      : `${DAYS_LONG[c.day]} ${fmtT(a)}–${fmtT(b)} · ${fmtH(b - a)}`;
+    el.style.color = (a != null && b != null && b <= a) ? '#b42318' : '';
+  });
   document.querySelectorAll('[data-capfield]').forEach(el => el.disabled = maximize);
   $('#maxHint').hidden = !maximize;
   document.querySelectorAll('#gList [data-gday]').forEach(l => l.classList.toggle('offday', !state.days[+l.dataset.gday].on));
