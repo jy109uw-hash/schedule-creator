@@ -100,7 +100,12 @@ input:disabled{background:var(--soft);color:var(--muted)}
 .cRow .cTimes{display:contents}
 .cRow .dur{grid-column:1 / 4;font-size:11.5px;color:var(--muted);margin-top:-2px}
 input[type=time]{font-variant-numeric:tabular-nums;min-width:0;padding-right:4px}
-.kRow{grid-template-columns:1fr 54px 66px 62px 34px 26px}
+.kRow{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,.8fr) 34px 26px;row-gap:6px}
+.kRow .kName{grid-column:1 / 4}
+.kRow .kAmt{grid-column:1}
+.kRow .kWhen{grid-column:3 / 6}
+.amt{display:grid;grid-template-columns:58px minmax(0,1fr);gap:4px}
+.kRow .kHint{grid-column:1 / 6;font-size:11.5px;color:var(--muted);margin-top:-2px}
 .listRow .f{font-size:11px}
 .sumPct{font-size:12.5px;margin:8px 0 0;color:var(--muted)}
 .sumPct b.bad{color:#b42318}
@@ -290,7 +295,7 @@ table.sum tr.total td{font-weight:700;border-top:2px solid var(--ink)}
       <summary>How it works</summary>
       <div class="sec">
         <ul>
-          <li><b>Flexible time</b> = paid working time minus fixed commitments and breaks. Appointment and task-mix percentages are shares of this.</li>
+          <li><b>Flexible time</b> = paid working time minus fixed commitments and breaks. Appointment percentages are shares of this. Each task type can instead use % of FTE (your paid hours, e.g. 25% of 35 h = 8.75 h) or a fixed number of hours per week.</li>
           <li>Order of placement: fixed commitments → meals → breaks → time set aside for tasks → appointments (spread evenly across days) → rest of the task mix → flex.</li>
           <li><b>Maximize patient time</b> books every appointment that fits inside your windows, with no daily cap. Task-mix percentages then apply to whatever time is left.</li>
           <li>Appointments get a notes buffer straight after, counted as client time.</li>
@@ -374,7 +379,8 @@ function normGroup(g, win) {
 }
 /* a task type: optional time set aside for it on particular days */
 function normCat(c) {
-  const out = Object.assign({ name: 'Task', pct: 5, block: 60, pref: 'any', color: '#888888' }, c || {});
+  const out = Object.assign({ name: 'Task', pct: 5, unit: 'flex', block: 60, pref: 'any', color: '#888888' }, c || {});
+  if (!['flex', 'fte', 'hrs'].includes(out.unit)) out.unit = 'flex';
   out.reserve = cleanWeek(out.reserve);
   return out;
 }
@@ -401,7 +407,7 @@ function defaults() {
           hours: wk({ 2: ['13:00', '16:00'], 4: ['08:30', '16:00'] }) }
       ].map(g => normGroup(g)) },
     cats: [
-      { name: 'Admin / charting', pct: 20, block: 60, pref: 'pm', color: '#c0782c', reserve: wk({ 2: ['08:30', '12:00'] }) },
+      { name: 'Admin / charting', pct: 25, unit: 'fte', block: 60, pref: 'pm', color: '#c0782c', reserve: wk({ 2: ['08:30', '12:00'] }) },
       { name: 'Program prep', pct: 10, block: 60, pref: 'any', color: '#6b5bb5' },
       { name: 'Professional development', pct: 5, block: 60, pref: 'any', color: '#2e8a6a' }
     ].map(normCat),
@@ -708,12 +714,20 @@ function generate(st) {
   // 5. task mix — in maximize mode it shares whatever flexible time the appointments left
   const mixBase = maximize ? sum(active, d => sum(freeSegs(d), ([a, b]) => b - a) + sum(d.blocks.filter(b => b.kind === 'cat'), b => b.e - b.s)) : flexTotal;
   stats.mixBase = mixBase;
-  const totalPct = (maximize ? 0 : sum(groups, g => g.pct)) + sum(st.cats, c => +c.pct || 0);
-  if (totalPct > 100) warn.push(`Your percentages add up to ${totalPct}% — the last task types in the list may not get their full share.`);
+  // a task's target can be a % of flexible time, a % of FTE (paid) hours, or fixed hours per week
+  const fteMin = Math.round((+st.fte || 0) * (+st.fullTime || 0) * 60);
+  const catTarget = c => {
+    const v = Math.max(0, +c.pct || 0);
+    return r15(c.unit === 'fte' ? fteMin * v / 100 : c.unit === 'hrs' ? v * 60 : mixBase * v / 100);
+  };
+  const apptMin = maximize ? 0 : sum(groups, g => flexTotal * Math.min(100, g.pct) / 100);
+  const catMin = sum(st.cats, catTarget), allocBase = maximize ? mixBase : flexTotal;
+  stats.alloc = { apptMin, catMin, base: allocBase, maximize };
+  if (apptMin + catMin > allocBase + 15) warn.push(`Your ${maximize ? 'task' : 'appointment and task'} targets add up to ${fmtH(apptMin + catMin)}, but only ${fmtH(allocBase)} of flexible time is ${maximize ? 'left after appointments' : 'available'} — the last task types in the list may not get their full share.`);
   const n = active.length;
   st.cats.forEach((c, ci) => {
     const name = (c.name || '').trim() || 'Task';
-    const target = r15(mixBase * Math.max(0, +c.pct || 0) / 100);
+    const target = catTarget(c);
     // set-aside time counts first; only the rest of its share is spread through flexible time
     const reserved = sum(active, d => sum(d.blocks.filter(b => b.kind === 'cat' && b.ci === ci), b => b.e - b.s));
     let rem = Math.max(0, r15(target - reserved)), planned = reserved;
@@ -735,7 +749,7 @@ function generate(st) {
         }
       }
     }
-    stats.cats.push({ name, color: c.color, target, planned, reserved });
+    stats.cats.push({ name, color: c.color, target, planned, reserved, unit: c.unit, value: +c.pct || 0 });
     if (planned < target - 15) warn.push(`Only ${fmtH(planned)} of the ${fmtH(target)} target fit for “${name}”.`);
   });
 
@@ -831,12 +845,15 @@ function renderCommitments() {
 }
 function renderCats() {
   $('#kList').innerHTML = state.cats.map((c, i) => `<div class="kItem"><div class="listRow kRow">
-    <div><label class="f">Task type</label><input data-path="cats.${i}.name"></div>
-    <div><label class="f">%</label><input type="number" min="0" max="100" step="5" data-path="cats.${i}.pct" data-type="num"></div>
-    <div><label class="f">Block</label><select data-path="cats.${i}.block" data-type="num">${[15, 30, 45, 60, 90, 120, 180].map(v => `<option value="${v}">${v} min</option>`).join('')}</select></div>
-    <div><label class="f">When</label><select data-path="cats.${i}.pref"><option value="any">Any</option><option value="am">AM</option><option value="pm">PM</option></select></div>
+    <div class="kName"><label class="f">Task type</label><input data-path="cats.${i}.name"></div>
     <div><label class="f">&nbsp;</label><input type="color" data-path="cats.${i}.color" aria-label="Colour"></div>
-    <button class="btn x" data-del="cats" data-i="${i}" title="Remove" aria-label="Remove task type">×</button></div>
+    <button class="btn x" data-del="cats" data-i="${i}" title="Remove" aria-label="Remove task type">×</button>
+    <div class="kAmt"><label class="f">Amount</label><div class="amt">
+      <input type="number" min="0" step="0.25" data-path="cats.${i}.pct" data-type="num" aria-label="Amount">
+      <select data-path="cats.${i}.unit" aria-label="Unit"><option value="flex">% of flexible</option><option value="fte">% of FTE</option><option value="hrs">hrs / week</option></select></div></div>
+    <div><label class="f">Block</label><select data-path="cats.${i}.block" data-type="num">${[15, 30, 45, 60, 90, 120, 180].map(v => `<option value="${v}">${v} min</option>`).join('')}</select></div>
+    <div class="kWhen"><label class="f">When</label><select data-path="cats.${i}.pref"><option value="any">Any</option><option value="am">AM</option><option value="pm">PM</option></select></div>
+    <div class="kHint" data-khint="${i}"></div></div>
     <details class="kRes" style="--kc:${esc(c.color)}"${c.reserve.some(h => h.from || h.until) ? ' open' : ''}>
       <summary>Set aside time for this task <small data-kcount="${i}"></small></summary>
       <div class="inner">
@@ -952,9 +969,13 @@ function update() {
   const target = Math.round((+state.fte || 0) * (+state.fullTime || 0) * 60);
   $('#targetHint').textContent = `Target: ${fmtH(target)} paid per week.`;
   const maximize = !!(state.appts.on && state.appts.maximize);
-  const pct = (state.appts.on && !maximize ? sum(state.appts.groups, g => +g.pct || 0) : 0) + sum(state.cats, c => +c.pct || 0);
-  $('#pctSum').innerHTML = (maximize ? `Task mix = <b class="${pct > 100 ? 'bad' : ''}">${pct}%</b> of the time left after appointments`
-    : `Appointments + task mix = <b class="${pct > 100 ? 'bad' : ''}">${pct}%</b>`) + (pct < 100 ? ` · ${100 - pct}% left for flex` : '');
+  const al = st.alloc || { apptMin: 0, catMin: 0, base: 0 }, used = al.apptMin + al.catMin, over = used > al.base + 15;
+  $('#pctSum').innerHTML = (al.maximize ? `Task mix = <b class="${over ? 'bad' : ''}">${fmtH(used)}</b> of the ${fmtH(al.base)} left after appointments`
+    : `Appointments + task mix = <b class="${over ? 'bad' : ''}">${fmtH(used)}</b> of ${fmtH(al.base)} flexible time`) + (used < al.base - 15 ? ` · ${fmtH(al.base - used)} left for flex` : '');
+  (st.cats || []).forEach((c, i) => {
+    const el = document.querySelector(`[data-khint="${i}"]`); if (!el) return;
+    el.textContent = `= ${fmtH(c.target)} per week` + (c.unit === 'fte' ? ` (${c.value}% of your ${fmtH(target)} FTE)` : c.unit === 'flex' ? ` (${c.value}% of ${fmtH(al.base)} flexible${al.maximize ? ' left after appointments' : ''})` : '');
+  });
   // maximize disables the daily cap and the % share; off days hide their window row
   document.querySelectorAll('#meal2Fields input, #meal2Fields select').forEach(el => el.disabled = !state.autoMeals);
   document.querySelectorAll('#restFields input').forEach(el => el.disabled = !state.breaks.on);
@@ -1085,7 +1106,8 @@ function renderSummary(res) {
   rows.push('<tr class="grp"><td colspan="4">Work</td></tr>');
   if (t.fixed) rows.push(`<tr><td><span class="dot" style="--c:${state.fixedColor}"></span>Fixed commitments</td><td class="n">${fmtH(t.fixed)}</td><td class="n">—</td><td class="n"></td></tr>`);
   (st.groups || []).forEach(g => rows.push(row(g.color, g.name, g.minutes, g.targetMin, `(${g.placed} × ${g.len} min${g.buf ? ` + ${g.buf} min notes` : ''})`)));
-  st.cats.forEach(c => rows.push(row(c.color, c.name, c.planned, c.target, c.reserved ? `(incl. ${fmtH(c.reserved)} set aside)` : '')));
+  const unitTxt = c => c.unit === 'fte' ? `${c.value}% of FTE` : c.unit === 'hrs' ? `${c.value} h/week` : `${c.value}% of flexible`;
+  st.cats.forEach(c => rows.push(row(c.color, c.name, c.planned, c.target, `(${unitTxt(c)}${c.reserved ? ` · incl. ${fmtH(c.reserved)} set aside` : ''})`)));
   rows.push(row(null, 'Flex / catch-up', t.flex, null));
 
   // Breaks: lunch, long-day meal break(s) and paid rest breaks, grouped together
