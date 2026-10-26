@@ -54,17 +54,24 @@ table.sum tr.grp td{font-size:11.5px;text-transform:uppercase;letter-spacing:.04
 .slots li small{color:var(--muted)}
 .gCard{border:1px solid var(--line);border-left:4px solid var(--gc,#2f6f9f);border-radius:8px;padding:8px 10px;margin-bottom:10px}
 .gHead{display:grid;grid-template-columns:1fr 34px 26px;gap:6px;align-items:end;margin-bottom:6px}
-.gDays{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 8px}
-.gDays label{display:flex;align-items:center;gap:4px;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer;user-select:none}
-.gDays label:has(input:checked){background:#e8f3f7;border-color:var(--accent)}
-.gDays input{width:13px;height:13px}
-.gDays label.offday{opacity:.45}
 .gHrHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
 .gHrs{margin:0 0 8px}
 .gHr{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 6px;align-items:center;padding:3px 0}
 .gHr + .gHr{border-top:1px dashed var(--line)}
 .gHr b{font-size:12.5px}
 .gHr small{grid-column:2;font-size:11.5px;color:var(--muted)}
+.gHr small:empty{display:none}
+.hrLine{display:grid;grid-template-columns:minmax(0,1fr) 22px;align-items:center;gap:2px}
+.hrLine .btn.x{padding:2px;font-size:14px}
+.kItem + .kItem{border-top:1px dashed var(--line)}
+.kItem .listRow{border-top:0}
+.kRes{margin:0 0 8px;font-size:12.5px}
+.kRes summary{cursor:pointer;color:var(--accent);font-weight:500;padding:2px 0;list-style:none}
+.kRes summary::-webkit-details-marker{display:none}
+.kRes summary::before{content:'▸ '}
+.kRes[open] summary::before{content:'▾ '}
+.kRes summary small{color:var(--muted);font-weight:400}
+.kRes .inner{border-left:3px solid var(--kc,#ccc);padding:4px 0 2px 10px;margin-top:4px}
 .gHr small.bad{color:#b42318}
 .gGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .gGrid .f{font-size:11px}
@@ -284,7 +291,7 @@ table.sum tr.total td{font-weight:700;border-top:2px solid var(--ink)}
       <div class="sec">
         <ul>
           <li><b>Flexible time</b> = paid working time minus fixed commitments and breaks. Appointment and task-mix percentages are shares of this.</li>
-          <li>Order of placement: fixed commitments → meals → breaks → appointments (spread evenly across days) → task mix → flex.</li>
+          <li>Order of placement: fixed commitments → meals → breaks → time set aside for tasks → appointments (spread evenly across days) → rest of the task mix → flex.</li>
           <li><b>Maximize patient time</b> books every appointment that fits inside your windows, with no daily cap. Task-mix percentages then apply to whatever time is left.</li>
           <li>Appointments get a notes buffer straight after, counted as client time.</li>
           <li>Settings save automatically in this browser only — nothing is sent anywhere. Use Export to back them up or move them to another computer.</li>
@@ -346,16 +353,32 @@ function getPath(o, p) { return p.split('.').reduce((a, k) => a == null ? a : a[
 function setPath(o, p, v) { const ks = p.split('.'); let a = o; for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]]; a[ks[ks.length - 1]] = v; }
 
 /* ---------- state ---------- */
-function normGroup(g) {
-  const out = Object.assign({ name: 'Clients', color: '#2f6f9f', days: DAYS.map((d, i) => i < 5), len: 60, buf: 15, maxPerDay: 4, pct: 20, pref: 'any' }, g || {});
-  // hours per day; older saves had one from/until for every day
+const blankWeek = () => DAYS.map(() => ({ from: '', until: '' }));
+const cleanWeek = w => (Array.isArray(w) && w.length === 7 ? w : blankWeek()).map(h => ({ from: (h && h.from) || '', until: (h && h.until) || '' }));
+/* an appointment group: seen on any day that has both a start and end time */
+function normGroup(g, win) {
+  const out = Object.assign({ name: 'Clients', color: '#2f6f9f', len: 60, buf: 15, maxPerDay: 4, pct: 20, pref: 'any' }, g || {});
   if (!Array.isArray(out.hours) || out.hours.length !== 7) out.hours = DAYS.map(() => ({ from: out.from || '', until: out.until || '' }));
-  out.hours = out.hours.map(h => ({ from: (h && h.from) || '', until: (h && h.until) || '' }));
-  delete out.from; delete out.until;
-  if (!Array.isArray(out.days) || out.days.length !== 7) out.days = DAYS.map((d, i) => i < 5);
-  out.days = out.days.map(Boolean);
+  out.hours = cleanWeek(out.hours);
+  // older saves ticked days and left hours blank for "any time": turn that into explicit hours (that day's appointment windows)
+  if (Array.isArray(out.days) && out.days.length === 7) {
+    out.hours = out.hours.map((h, j) => {
+      if (!out.days[j]) return { from: '', until: '' };
+      if (h.from && h.until) return h;
+      const w = (win || [])[j] || defaultWin();
+      return { from: h.from || w.amS || w.pmS || '08:30', until: h.until || w.pmE || w.amE || '16:00' };
+    });
+  }
+  delete out.days; delete out.from; delete out.until;
   return out;
 }
+/* a task type: optional time set aside for it on particular days */
+function normCat(c) {
+  const out = Object.assign({ name: 'Task', pct: 5, block: 60, pref: 'any', color: '#888888' }, c || {});
+  out.reserve = cleanWeek(out.reserve);
+  return out;
+}
+const wk = o => DAYS.map((d, j) => o[j] ? { from: o[j][0], until: o[j][1] } : { from: '', until: '' });
 function defaultWin(earliest, latest) { return { amS: earliest || '08:30', amE: '12:00', pmS: '13:00', pmE: latest || '16:00' }; }
 function defaults() {
   return {
@@ -372,14 +395,16 @@ function defaults() {
     ],
     appts: { on: true, maximize: false, win: DAYS.map(() => defaultWin()),
       groups: [
-        { name: 'General clients', color: '#2f6f9f', days: [true, true, false, true, false, false, false], len: 60, buf: 15, maxPerDay: 4, pct: 35, pref: 'any' },
-        { name: 'Program clients', color: '#0f8a8a', days: [false, false, true, false, true, false, false], len: 45, buf: 15, maxPerDay: 4, pct: 20, pref: 'any' }
-      ].map(normGroup) },
+        { name: 'General clients', color: '#2f6f9f', len: 60, buf: 15, maxPerDay: 4, pct: 35, pref: 'any',
+          hours: wk({ 0: ['08:30', '16:00'], 1: ['08:30', '16:00'], 3: ['08:30', '16:00'] }) },
+        { name: 'Program clients', color: '#0f8a8a', len: 45, buf: 15, maxPerDay: 4, pct: 20, pref: 'any',
+          hours: wk({ 2: ['13:00', '16:00'], 4: ['08:30', '16:00'] }) }
+      ].map(g => normGroup(g)) },
     cats: [
-      { name: 'Admin / charting', pct: 20, block: 60, pref: 'pm', color: '#c0782c' },
+      { name: 'Admin / charting', pct: 20, block: 60, pref: 'pm', color: '#c0782c', reserve: wk({ 2: ['08:30', '12:00'] }) },
       { name: 'Program prep', pct: 10, block: 60, pref: 'any', color: '#6b5bb5' },
       { name: 'Professional development', pct: 5, block: 60, pref: 'any', color: '#2e8a6a' }
-    ],
+    ].map(normCat),
     fixedColor: '#4a5568'
   };
 }
@@ -400,15 +425,16 @@ function normalize(s) {
   // appointment groups (older saved settings had one set of appointment fields)
   if (!Array.isArray(oldA.groups)) {
     out.appts.groups = ('len' in oldA || 'label' in oldA || 'pct' in oldA)
-      ? [{ name: oldA.label || 'Client appointment', color: oldA.color || '#2f6f9f', days: DAYS.map(() => true), len: oldA.len ?? 60, buf: oldA.buf ?? 15, maxPerDay: oldA.maxPerDay ?? 4, pct: oldA.pct ?? 55, pref: oldA.pref || 'any' }]
+      ? [{ name: oldA.label || 'Client appointment', color: oldA.color || '#2f6f9f', days: DAYS.map((d, j) => out.days[j].on), len: oldA.len ?? 60, buf: oldA.buf ?? 15, maxPerDay: oldA.maxPerDay ?? 4, pct: oldA.pct ?? 55, pref: oldA.pref || 'any' }]
       : defaults().appts.groups;
   }
-  out.appts.groups = out.appts.groups.map(g => normGroup(g));
+  out.appts.groups = out.appts.groups.map(g => normGroup(g, out.appts.win));
   ['label', 'color', 'len', 'buf', 'maxPerDay', 'pct', 'pref'].forEach(k => delete out.appts[k]);
   delete out.appts.earliest; delete out.appts.latest;
   delete out.breaks.count; delete out.breaks.longCount; delete out.breaks.longHours; // replaced by the max-stretch rule
   if (!Array.isArray(out.commitments)) out.commitments = [];
   if (!Array.isArray(out.cats)) out.cats = [];
+  out.cats = out.cats.map(normCat);
   return out;
 }
 function load() { try { const raw = localStorage.getItem(KEY); return normalize(raw ? JSON.parse(raw) : null); } catch (e) { return defaults(); } }
@@ -502,6 +528,18 @@ function placeBreaks(d, st, bumpAppts) {
       }
     }
     if (t == null) {
+      // a set-aside task block can give up a few minutes for a needed break
+      const cb = d.blocks.filter(x => x.kind === 'cat' && x.s >= a && x.e <= b && x.e - x.s > m)
+        .sort((x, y) => Math.abs((x.s + x.e) / 2 - target) - Math.abs((y.s + y.e) / 2 - target))[0];
+      if (cb) {
+        const tt = Math.min(Math.max(r15(target), cb.s), cb.e - m);
+        d.blocks = d.blocks.filter(x => x !== cb);
+        if (tt > cb.s) d.blocks.push(Object.assign({}, cb, { e: tt }));
+        if (tt + m < cb.e) d.blocks.push(Object.assign({}, cb, { s: tt + m }));
+        t = tt;
+      }
+    }
+    if (t == null) {
       // something fixed (e.g. a long commitment) fills the stretch — flag it, and still break as soon as possible
       d.restGap = true; skip.add(a);
       t = findSlot(d, m, a + X, a, b);
@@ -572,15 +610,35 @@ function generate(st) {
   active.forEach(d => placeMeals(d, st, L));
   const A = st.appts;
   const groups = (A.on ? A.groups : []).map((g, gi) => ({
-    gi, name: (g.name || '').trim() || `Group ${gi + 1}`, color: g.color, days: g.days, pref: g.pref || 'any', hours: (g.hours || []).map(h => ({ from: toMin(h && h.from), until: toMin(h && h.until) })),
+    gi, name: (g.name || '').trim() || `Group ${gi + 1}`, color: g.color, pref: g.pref || 'any', hours: (g.hours || []).map(h => ({ from: toMin(h && h.from), until: toMin(h && h.until) })),
     len: Math.round(+g.len || 0), buf: Math.max(0, Math.round(+g.buf || 0)), pct: Math.max(0, +g.pct || 0), maxPerDay: Math.max(0, g.maxPerDay | 0)
   })).filter(g => g.len > 0);
+  // a group is seen on a day only when that day has both a start and an end time
+  groups.forEach(g => g.onDay = i => { const h = g.hours[i] || {}; return h.from != null && h.until != null; });
   const maximize = !!(A.on && A.maximize && groups.length);
   // normally breaks go before appointments; when maximizing, appointments go first and breaks fit around them
   if (!maximize) active.forEach(d => placeBreaks(d, st));
 
   let flexTotal = sum(active, d => sum(freeSegs(d), ([a, b]) => b - a));
   const stats = { flexTotal, appt: null, cats: [] };
+
+  // 3b. time set aside for task types (e.g. paperwork every Wednesday morning) — claimed before appointments
+  st.cats.forEach((c, ci) => {
+    const name = (c.name || '').trim() || 'Task', empty = [], bad = [];
+    active.forEach(d => {
+      const h = (c.reserve || [])[d.i] || {}, lo = toMin(h.from), hi = toMin(h.until);
+      if (lo == null || hi == null) return;
+      if (hi <= lo) { bad.push(DAYS[d.i]); return; }
+      let got = 0;
+      freeSegs(d).forEach(([a, b]) => {
+        const s0 = Math.max(a, lo), e0 = Math.min(b, hi);
+        if (e0 - s0 >= 15) { d.blocks.push({ s: s0, e: e0, kind: 'cat', ci, label: name, reserved: true }); got += e0 - s0; }
+      });
+      if (!got) empty.push(DAYS[d.i]);
+    });
+    if (bad.length) warn.push(`“${name}”: set-aside time ends before it starts on ${bad.join(', ')}.`);
+    if (empty.length) warn.push(`“${name}”: its set-aside time on ${empty.join(', ')} is already taken by commitments or breaks, or falls outside your hours.`);
+  });
 
   // 4. appointments
   stats.groups = [];
@@ -595,17 +653,17 @@ function generate(st) {
       g.target = maximize ? Infinity : Math.floor(flexTotal * Math.min(100, g.pct) / 100 / g.unit);
       g.maxD = maximize ? Infinity : g.maxPerDay;
       g.placed = 0;
-      g.dayList = active.filter(d => g.days[d.i]);
+      g.dayList = active.filter(d => g.onDay(d.i));
       g.hoursBad = true;
-      const hasHours = g.hours.some(h => h.from != null || h.until != null);
-      g.hasHours = hasHours;
+      g.hasHours = true;
+      const partial = active.filter(d => { const h = g.hours[d.i] || {}; return (h.from == null) !== (h.until == null); });
+      if (partial.length) warn.push(`“${g.name}”: set both a start and an end time on ${partial.map(d => DAYS[d.i]).join(', ')} (a day needs both to be booked).`);
       const reversed = g.dayList.filter(d => { const h = g.hours[d.i] || {}; return h.from != null && h.until != null && h.until <= h.from; });
       const noFit = g.dayList.filter(d => !reversed.includes(d) && !groupWins(g, d).some(w => w.e - w.s >= g.len));
       if (reversed.length) warn.push(`“${g.name}”: hours end before they start on ${reversed.map(d => DAYS[d.i]).join(', ')}.`);
-      if (noFit.length) warn.push(`“${g.name}”: no ${g.len}-min appointment fits on ${noFit.map(d => DAYS[d.i]).join(', ')} — ${hasHours ? "that day's hours don't overlap" : 'there is no room in'} the appointment windows.`);
+      if (noFit.length) warn.push(`“${g.name}”: no ${g.len}-min appointment fits on ${noFit.map(d => DAYS[d.i]).join(', ')} — that day's hours don't overlap the appointment windows.`);
       g.hoursBad = g.dayList.length > 0 && reversed.length + noFit.length === g.dayList.length;
-      if (!g.days.some(Boolean)) warn.push(`“${g.name}” has no days selected, so no appointments were booked.`);
-      else if (!g.dayList.length) warn.push(`“${g.name}” runs only on days you aren't working.`);
+      if (!g.dayList.length && !partial.length) warn.push(`“${g.name}” has no hours set on your working days, so no appointments were booked.`);
     });
     // round-robin: each pass gives every group one chance on each of its days, so groups sharing a day take turns
     for (const phase of ['pref', 'any']) {
@@ -613,7 +671,7 @@ function generate(st) {
       while (progress) {
         progress = false;
         for (const d of active) {
-          const order = groups.filter(g => g.days[d.i]);
+          const order = groups.filter(g => g.onDay(d.i));
           for (let k = 0; k < order.length; k++) {
             const g = order[(k + pass) % order.length];
             if (g.placed >= g.target || (d.gCount[g.gi] || 0) >= g.maxD || !d.wins.length) continue;
@@ -631,7 +689,7 @@ function generate(st) {
       active.forEach(d => placeBreaks(d, st, true));
       groups.forEach(g => g.placed = sum(active, d => d.blocks.filter(b => b.kind === 'appt' && b.gi === g.gi).length));
       // flexible time = free time + appointment time, now that breaks are in
-      flexTotal = stats.flexTotal = sum(active, d => sum(freeSegs(d), ([a, b]) => b - a) + sum(d.blocks.filter(b => b.kind === 'appt' || b.kind === 'notes'), b => b.e - b.s));
+      flexTotal = stats.flexTotal = sum(active, d => sum(freeSegs(d), ([a, b]) => b - a) + sum(d.blocks.filter(b => b.kind === 'appt' || b.kind === 'notes' || b.kind === 'cat'), b => b.e - b.s));
     }
     groups.forEach(g => {
       stats.groups.push({ gi: g.gi, name: g.name, color: g.color, placed: g.placed, target: g.target, len: g.len, buf: g.buf,
@@ -648,7 +706,7 @@ function generate(st) {
   }
 
   // 5. task mix — in maximize mode it shares whatever flexible time the appointments left
-  const mixBase = maximize ? sum(active, d => sum(freeSegs(d), ([a, b]) => b - a)) : flexTotal;
+  const mixBase = maximize ? sum(active, d => sum(freeSegs(d), ([a, b]) => b - a) + sum(d.blocks.filter(b => b.kind === 'cat'), b => b.e - b.s)) : flexTotal;
   stats.mixBase = mixBase;
   const totalPct = (maximize ? 0 : sum(groups, g => g.pct)) + sum(st.cats, c => +c.pct || 0);
   if (totalPct > 100) warn.push(`Your percentages add up to ${totalPct}% — the last task types in the list may not get their full share.`);
@@ -656,7 +714,9 @@ function generate(st) {
   st.cats.forEach((c, ci) => {
     const name = (c.name || '').trim() || 'Task';
     const target = r15(mixBase * Math.max(0, +c.pct || 0) / 100);
-    let rem = target, planned = 0;
+    // set-aside time counts first; only the rest of its share is spread through flexible time
+    const reserved = sum(active, d => sum(d.blocks.filter(b => b.kind === 'cat' && b.ci === ci), b => b.e - b.s));
+    let rem = Math.max(0, r15(target - reserved)), planned = reserved;
     const blockLen = Math.max(15, Math.round(c.block || 60));
     for (const ph of (c.pref === 'any' || !c.pref ? ['any'] : [c.pref, 'any'])) {
       let progress = true;
@@ -675,7 +735,7 @@ function generate(st) {
         }
       }
     }
-    stats.cats.push({ name, color: c.color, target, planned });
+    stats.cats.push({ name, color: c.color, target, planned, reserved });
     if (planned < target - 15) warn.push(`Only ${fmtH(planned)} of the ${fmtH(target)} target fit for “${name}”.`);
   });
 
@@ -686,7 +746,7 @@ function generate(st) {
     const merged = [];
     for (const b of d.blocks) {
       const p = merged[merged.length - 1];
-      if (p && p.e === b.s && (b.kind === 'cat' || b.kind === 'flex') && p.kind === b.kind && p.ci === b.ci) p.e = b.e;
+      if (p && p.e === b.s && (b.kind === 'cat' || b.kind === 'flex') && p.kind === b.kind && p.ci === b.ci && !!p.reserved === !!b.reserved) p.e = b.e;
       else merged.push(b);
     }
     d.blocks = merged;
@@ -770,13 +830,20 @@ function renderCommitments() {
     <div class="dur" data-dur="${i}"></div></div>`).join('') || '<p class="hint">No fixed commitments.</p>';
 }
 function renderCats() {
-  $('#kList').innerHTML = state.cats.map((c, i) => `<div class="listRow kRow">
+  $('#kList').innerHTML = state.cats.map((c, i) => `<div class="kItem"><div class="listRow kRow">
     <div><label class="f">Task type</label><input data-path="cats.${i}.name"></div>
     <div><label class="f">%</label><input type="number" min="0" max="100" step="5" data-path="cats.${i}.pct" data-type="num"></div>
     <div><label class="f">Block</label><select data-path="cats.${i}.block" data-type="num">${[15, 30, 45, 60, 90, 120, 180].map(v => `<option value="${v}">${v} min</option>`).join('')}</select></div>
     <div><label class="f">When</label><select data-path="cats.${i}.pref"><option value="any">Any</option><option value="am">AM</option><option value="pm">PM</option></select></div>
     <div><label class="f">&nbsp;</label><input type="color" data-path="cats.${i}.color" aria-label="Colour"></div>
-    <button class="btn x" data-del="cats" data-i="${i}" title="Remove" aria-label="Remove task type">×</button></div>`).join('') || '<p class="hint">No task types — all remaining time becomes flex.</p>';
+    <button class="btn x" data-del="cats" data-i="${i}" title="Remove" aria-label="Remove task type">×</button></div>
+    <details class="kRes" style="--kc:${esc(c.color)}"${c.reserve.some(h => h.from || h.until) ? ' open' : ''}>
+      <summary>Set aside time for this task <small data-kcount="${i}"></small></summary>
+      <div class="inner">
+        <p class="hint" style="margin:0 0 4px">This time is kept for ${esc(c.name || 'this task')} before appointments or anything else are booked, and counts toward its %.</p>
+        ${DAYS.map((d, j) => hourRow(`cats.${i}.reserve.${j}`, d, `data-krow="${i}-${j}"`, `data-act="kclear" data-i="${i}" data-j="${j}"`)).join('')}
+      </div>
+    </details></div>`).join('') || '<p class="hint">No task types — all remaining time becomes flex.</p>';
 }
 function fillForm() {
   document.querySelectorAll('[data-path]').forEach(el => {
@@ -784,6 +851,14 @@ function fillForm() {
     if (el.type === 'checkbox') el.checked = !!v;
     else el.value = v == null ? '' : String(v);
   });
+}
+/* one day's from–until row, with a clear button and a readout line */
+function hourRow(path, d, rowAttr, clearAttr) {
+  return `<div class="gHr" ${rowAttr}>
+      <b>${d}</b>
+      <div class="hrLine"><div class="wPair"><input type="time" step="900" data-path="${path}.from" aria-label="${d} from"><span>–</span><input type="time" step="900" data-path="${path}.until" aria-label="${d} until"></div>
+      <button class="btn x" ${clearAttr} title="Clear ${d}" aria-label="Clear ${d}">×</button></div>
+      <small></small></div>`;
 }
 function renderGroups() {
   const gs = state.appts.groups;
@@ -793,15 +868,10 @@ function renderGroups() {
       <div><label class="f">&nbsp;</label><input type="color" data-path="appts.groups.${i}.color" aria-label="Group colour"></div>
       <button class="btn x" data-del="groups" data-i="${i}" title="Remove group" aria-label="Remove group">×</button>
     </div>
-    <label class="f">Days this group is seen</label>
-    <div class="gDays">${DAYS.map((d, j) => `<label data-gday="${j}"><input type="checkbox" data-path="appts.groups.${i}.days.${j}">${d}</label>`).join('')}</div>
-    <div class="gHrHead"><label class="f" style="margin:0">Hours on each day <span style="font-weight:400">(blank = any time in the windows)</span></label>
-      <button class="btn small" data-act="ghcopy" data-i="${i}" title="Copy the first day's hours to this group's other days">Same for all</button></div>
-    <div class="gHrs">${DAYS.map((d, j) => `<div class="gHr" data-ghrow="${i}-${j}">
-      <b>${d}</b>
-      <div class="wPair"><input type="time" step="900" data-path="appts.groups.${i}.hours.${j}.from" aria-label="${d} from"><span>–</span><input type="time" step="900" data-path="appts.groups.${i}.hours.${j}.until" aria-label="${d} until"></div>
-      <small data-geff="${i}-${j}"></small></div>`).join('')}
-      <p class="hint gNoDays" data-gnodays="${i}" style="margin:2px 0 0">Tick a day above to set its hours.</p></div>
+    <div class="gHrHead"><label class="f" style="margin:0">When this group is seen <span style="font-weight:400">(leave a day blank = not seen)</span></label>
+      <button class="btn small" data-act="ghcopy" data-i="${i}" title="Copy the first day you've filled in to every working day">Copy to all days</button></div>
+    <div class="gHrs">${DAYS.map((d, j) => hourRow(`appts.groups.${i}.hours.${j}`, d, `data-ghrow="${i}-${j}"`, `data-act="ghclear" data-i="${i}" data-j="${j}"`)).join('')}
+      <p class="hint" data-gnodays="${i}" style="margin:2px 0 0;color:#8a5000">No hours set — this group won't be booked.</p></div>
     <div class="gGrid">
       <div><label class="f">Length</label><input type="number" min="10" max="240" step="5" data-path="appts.groups.${i}.len" data-type="num" title="Appointment length (min)"></div>
       <div><label class="f">Notes</label><input type="number" min="0" max="60" step="5" data-path="appts.groups.${i}.buf" data-type="num" title="Notes time after each appointment (min)"></div>
@@ -834,8 +904,8 @@ document.addEventListener('click', e => {
   const add = e.target.closest('[data-add]'), del = e.target.closest('[data-del]'), act = e.target.closest('[data-act]');
   if (add) {
     if (add.dataset.add === 'commitments') state.commitments.push({ title: 'New commitment', day: 0, start: '10:00', end: '11:00' });
-    else if (add.dataset.add === 'groups') state.appts.groups.push(normGroup({ name: 'Group ' + (state.appts.groups.length + 1), color: GPALETTE[state.appts.groups.length % GPALETTE.length], days: DAYS.map(() => false), pct: 10 }));
-    else state.cats.push({ name: 'New task', pct: 5, block: 60, pref: 'any', color: PALETTE[state.cats.length % PALETTE.length] });
+    else if (add.dataset.add === 'groups') state.appts.groups.push(normGroup({ name: 'Group ' + (state.appts.groups.length + 1), color: GPALETTE[state.appts.groups.length % GPALETTE.length], pct: 10 }));
+    else state.cats.push(normCat({ name: 'New task', pct: 5, block: 60, pref: 'any', color: PALETTE[state.cats.length % PALETTE.length] }));
     renderForm(); changed();
   } else if (del) {
     (del.dataset.del === 'groups' ? state.appts.groups : state[del.dataset.del]).splice(+del.dataset.i, 1); renderForm(); changed();
@@ -844,8 +914,13 @@ document.addEventListener('click', e => {
     if (a === 'print') window.print();
     if (a === 'fit') { fitEndTimes(); fillForm(); changed(); }
     if (a === 'ghcopy') {
-      const g = state.appts.groups[+act.dataset.i], first = g && g.days.findIndex(Boolean);
-      if (g && first >= 0) { const h = g.hours[first]; g.hours = g.hours.map((x, j) => g.days[j] ? { from: h.from, until: h.until } : x); fillForm(); changed(); }
+      const g = state.appts.groups[+act.dataset.i];
+      const first = g ? g.hours.findIndex((h, j) => state.days[j].on && h.from && h.until) : -1;
+      if (first >= 0) { const h = g.hours[first]; g.hours = g.hours.map((x, j) => state.days[j].on ? { from: h.from, until: h.until } : x); fillForm(); changed(); }
+    }
+    if (a === 'ghclear' || a === 'kclear') {
+      const list = a === 'ghclear' ? state.appts.groups[+act.dataset.i].hours : state.cats[+act.dataset.i].reserve;
+      list[+act.dataset.j] = { from: '', until: '' }; fillForm(); changed();
     }
     if (a === 'copywin') { const m = state.appts.win[0]; state.appts.win = DAYS.map(() => Object.assign({}, m)); fillForm(); changed(); }
     if (a === 'reset' && confirm('Reset all settings to the defaults?')) { state = defaults(); renderForm(); changed(); }
@@ -892,21 +967,20 @@ function update() {
   });
   document.querySelectorAll('[data-capfield]').forEach(el => el.disabled = maximize);
   $('#maxHint').hidden = !maximize;
-  document.querySelectorAll('#gList [data-gday]').forEach(l => l.classList.toggle('offday', !state.days[+l.dataset.gday].on));
   // per-day hour rows: show only ticked days, with a live readout of when that group can actually be booked
   document.querySelectorAll('[data-ghrow]').forEach(row => {
     const [i, j] = row.dataset.ghrow.split('-').map(Number), g = state.appts.groups[i]; if (!g) return;
-    row.hidden = !g.days[j];
+    row.hidden = !state.days[j].on;
     const out = row.querySelector('small'), dd = state.days[j], h = g.hours[j] || {};
     const S = toMin(dd.start), E = toMin(dd.end), lo = toMin(h.from), hi = toMin(h.until);
     const rng = ws => ws.map(w => `${fmtT(w.s)}–${fmtT(w.e)}`).join(', ');
     const wins = apptWindows(state, j).map(w => ({ s: Math.max(w.s, S ?? 0), e: Math.min(w.e, E ?? 1440) })).filter(w => w.e > w.s);
     const eff = wins.map(w => ({ s: Math.max(w.s, lo ?? -1), e: Math.min(w.e, hi ?? 1e9) })).filter(w => w.e > w.s);
     let msg, bad = false;
-    if (!dd.on) { msg = '⚠ Not one of your working days'; bad = true; }
-    else if (lo != null && hi != null && hi <= lo) { msg = '⚠ End time must be after start time'; bad = true; }
+    if (lo == null && hi == null) msg = '';
+    else if ((lo == null) !== (hi == null)) { msg = '⚠ Set both a start and an end time'; bad = true; }
+    else if (hi <= lo) { msg = '⚠ End time must be after start time'; bad = true; }
     else if (!wins.length) { msg = '⚠ No appointment window on this day'; bad = true; }
-    else if (lo == null && hi == null) msg = `Any time in the windows: ${rng(wins)}`;
     else if (!eff.length) { msg = `⚠ Outside this day's appointment windows (${rng(wins)})`; bad = true; }
     else {
       // only call it trimmed when the hours reach past the day's windows (not just the lunch gap between them)
@@ -916,7 +990,26 @@ function update() {
     }
     out.textContent = msg; out.classList.toggle('bad', bad);
   });
-  document.querySelectorAll('[data-gnodays]').forEach(p => { const g = state.appts.groups[+p.dataset.gnodays]; p.hidden = !g || g.days.some(Boolean); });
+  document.querySelectorAll('[data-gnodays]').forEach(p => { const g = state.appts.groups[+p.dataset.gnodays]; p.hidden = !g || g.hours.some((h, j) => state.days[j].on && h.from && h.until); });
+  // set-aside rows for task types
+  document.querySelectorAll('[data-krow]').forEach(row => {
+    const [i, j] = row.dataset.krow.split('-').map(Number), c = state.cats[i]; if (!c) return;
+    row.hidden = !state.days[j].on;
+    const h = c.reserve[j] || {}, lo = toMin(h.from), hi = toMin(h.until), out = row.querySelector('small');
+    let msg = '', bad = false;
+    if ((lo == null) !== (hi == null)) { msg = '⚠ Set both a start and an end time'; bad = true; }
+    else if (lo != null && hi <= lo) { msg = '⚠ End time must be after start time'; bad = true; }
+    else if (lo != null) {
+      const got = sum(res.active.filter(d => d.i === j).flatMap(d => d.blocks.filter(b => b.kind === 'cat' && b.ci === i && b.reserved)), b => b.e - b.s);
+      msg = got ? `${fmtH(got)} kept for this task${got < hi - lo ? ' (breaks/commitments inside are left as they are)' : ''}` : '⚠ Already taken by commitments or breaks';
+      bad = !got;
+    }
+    out.textContent = msg; out.classList.toggle('bad', bad);
+  });
+  document.querySelectorAll('[data-kcount]').forEach(el => {
+    const c = state.cats[+el.dataset.kcount], n = c ? c.reserve.filter((h, j) => state.days[j].on && h.from && h.until).length : 0;
+    el.textContent = n ? `· ${n} day${n === 1 ? '' : 's'}` : '';
+  });
   document.querySelectorAll('#gList .gCard').forEach((c, i) => c.style.setProperty('--gc', (state.appts.groups[i] || {}).color || '#2f6f9f'));
   document.querySelectorAll('[data-winday]').forEach(r => r.hidden = !state.days[+r.dataset.winday].on);
 
@@ -992,7 +1085,7 @@ function renderSummary(res) {
   rows.push('<tr class="grp"><td colspan="4">Work</td></tr>');
   if (t.fixed) rows.push(`<tr><td><span class="dot" style="--c:${state.fixedColor}"></span>Fixed commitments</td><td class="n">${fmtH(t.fixed)}</td><td class="n">—</td><td class="n"></td></tr>`);
   (st.groups || []).forEach(g => rows.push(row(g.color, g.name, g.minutes, g.targetMin, `(${g.placed} × ${g.len} min${g.buf ? ` + ${g.buf} min notes` : ''})`)));
-  st.cats.forEach(c => rows.push(row(c.color, c.name, c.planned, c.target)));
+  st.cats.forEach(c => rows.push(row(c.color, c.name, c.planned, c.target, c.reserved ? `(incl. ${fmtH(c.reserved)} set aside)` : '')));
   rows.push(row(null, 'Flex / catch-up', t.flex, null));
 
   // Breaks: lunch, long-day meal break(s) and paid rest breaks, grouped together
